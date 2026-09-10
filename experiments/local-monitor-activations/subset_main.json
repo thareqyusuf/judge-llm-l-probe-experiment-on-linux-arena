@@ -5,7 +5,7 @@
 "reasoning_effort": "low",
 "pinned_chat_template_sha256": "df7f5607a0ab347ab17cba68e695352e326d911c8c4740599d12f0847d369d90",
 "prompt_template_sha256": "a4a48d036bca6728925ad60061e214177e16fc063075ba084726ee52529d2058",
-"raw": "g2_prep_20260910T101555Z.json",
+"raw": "g2_prep_20260910T103431Z.json",
 "order": "ascending n_tokens",
 "actions": [
 {

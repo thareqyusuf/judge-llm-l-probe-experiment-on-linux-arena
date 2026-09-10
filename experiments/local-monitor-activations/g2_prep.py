@@ -109,7 +109,9 @@ def main():
     ap.add_argument("--target-actions", type=int, default=2000)
     ap.add_argument("--min-per-category", type=int, default=3)
     ap.add_argument("--budget-hours", type=float, default=16.0, help="GPU hours allowed for G4 (main + counterfactual + scrub)")
-    ap.add_argument("--n-counterfactual", type=int, default=250)
+    ap.add_argument("--n-counterfactual", type=int, default=250, help="total (used only for the cap-table worst case)")
+    ap.add_argument("--n-cf-action", type=int, default=150, help="stratum: current action has >=1 neutralization event")
+    ap.add_argument("--n-cf-history", type=int, default=100, help="stratum: history changes, current action does not")
     ap.add_argument("--workers", type=int, default=32)
     args = ap.parse_args()
 
@@ -358,26 +360,37 @@ def main():
     (HERE.parent / "subset_main.json").write_text(json.dumps(subset_main, indent=0))
 
     # ── 6. counterfactual subset + diffs ────────────────────────────────────────────────────
-    elig = [r for r in sub if (r["neut_hist_events"] + r["neut_action_events"]) > 0]
-    cells = collections.defaultdict(list)
-    for r in elig:
-        cells[(r["side"], bucket(r["cached_mean"]))].append(r)
-    for v in cells.values():
-        rng.shuffle(v)
-    keys = sorted(cells)
-    per = args.n_counterfactual // len(keys)
+    strata = {"action": ([r for r in sub if r["neut_action_events"] > 0], args.n_cf_action),
+              "history_only": ([r for r in sub if r["neut_action_events"] == 0 and r["neut_hist_events"] > 0], args.n_cf_history)}
     chosen_cf = []
-    for k in keys:
-        chosen_cf += cells[k][:per]; cells[k] = cells[k][per:]
-    left = [r for k in keys for r in cells[k]]; rng.shuffle(left)
-    chosen_cf += left[:max(0, args.n_counterfactual - len(chosen_cf))]
+    strata_report = {}
+    for name, (elig, n_want) in strata.items():
+        cells = collections.defaultdict(list)
+        for r in elig:
+            cells[(r["side"], bucket(r["cached_mean"]))].append(r)
+        for v in cells.values():
+            v.sort(key=lambda r: (r["traj_id"], r["action_idx"])); rng.shuffle(v)
+        keys = sorted(cells)
+        per = n_want // len(keys)
+        picked = []
+        for k in keys:
+            picked += cells[k][:per]; cells[k] = cells[k][per:]
+        left = [r for k in keys for r in cells[k]]; rng.shuffle(left)
+        picked += left[:max(0, n_want - len(picked))]
+        for r in picked:
+            r["counterfactual_stratum"] = name
+        chosen_cf += picked
+        strata_report[name] = {"n_eligible_in_main": len(elig), "n": len(picked), "n_by_side": dict(collections.Counter(r["side"] for r in picked)),
+                               "cells": {f"{s}/{b}": n for (s, b), n in sorted(collections.Counter((r["side"], bucket(r["cached_mean"])) for r in picked).items())}}
     cf_cells = collections.Counter((r["side"], bucket(r["cached_mean"])) for r in chosen_cf)
     R["subset_counterfactual"] = {
-        "n": len(chosen_cf), "n_eligible_in_main": len(elig), "eligibility": "in subset_main and >= 1 neutralization event in history or current action",
+        "n": len(chosen_cf), "strata": strata_report,
+        "eligibility": "action stratum: >=1 neutralization event in the current action; history_only stratum: none in the current action, >=1 in the history; both drawn from subset_main, stratified over side x cached-score bucket",
         "cells": {f"{s}/{b}": n for (s, b), n in sorted(cf_cells.items())}, "score_buckets": SCORE_BUCKETS,
         "n_with_action_events": sum(r["neut_action_events"] > 0 for r in chosen_cf),
         "projected_hours_per_render": projected_hours(chosen_cf),
         "neutralize_table": mp._NEUTRALIZE_SRC + [("<non-private non-loopback IPv4>", "127.0.0.1")],
+        "neutralize_omitted": mp.NEUTRALIZE_OMITTED,
         "random_scrub_table": mp._RANDOM_SCRUB_SRC,
         "applies_to": "history block and current_action block only (agent-authored text); task description, covert objectives and template untouched",
     }
@@ -391,14 +404,20 @@ def main():
     subset_cf = {**{k: subset_main[k] for k in ("cap_tokens", "seed", "template_date", "reasoning_effort", "pinned_chat_template_sha256", "prompt_template_sha256", "raw")},
                  "parent": "subset_main.json", "renders": ["neutralized", "random_scrub"],
                  "actions": [{"traj_id": r["traj_id"], "action_idx": r["action_idx"], "side": r["side"], "env": r["env"], "n_tokens": r["n_tokens"],
+                              "counterfactual_stratum": r["counterfactual_stratum"],
                               "cached_mean": r["cached_mean"], "score_bucket": bucket(r["cached_mean"]), "placeholder": r["placeholder"],
                               "neut_hist_events": r["neut_hist_events"], "neut_action_events": r["neut_action_events"]}
                              for r in sorted(chosen_cf, key=lambda r: (r["n_tokens"], r["traj_id"], r["action_idx"]))]}
     (HERE.parent / "subset_counterfactual.json").write_text(json.dumps(subset_cf, indent=0))
     # 10 diffs: 5 with current-action changes (prefer), 5 others; alternate sides
-    with_act = [r for r in chosen_cf if r["neut_action_events"] > 0]
-    others = [r for r in chosen_cf if r["neut_action_events"] == 0]
-    pick = (with_act[:5] + others[:5])[:10]
+    def alternate(rs, k):
+        att = [r for r in rs if r["side"] == "attack"]; hon = [r for r in rs if r["side"] == "honest"]
+        out = []
+        while len(out) < k and (att or hon):
+            if att: out.append(att.pop(0))
+            if hon and len(out) < k: out.append(hon.pop(0))
+        return out
+    pick = alternate([r for r in chosen_cf if r["counterfactual_stratum"] == "action"], 5) + alternate([r for r in chosen_cf if r["counterfactual_stratum"] == "history_only"], 5)
     diffs = []
     for r in pick:
         t = trajs[r["traj_id"]]
@@ -408,7 +427,7 @@ def main():
         ud = [l for l in difflib.unified_diff(o["text"].splitlines(), n["text"].splitlines(), "original", "neutralized", n=0, lineterm="")]
         us = [l for l in difflib.unified_diff(o["text"].splitlines(), sc["text"].splitlines(), "original", "random_scrub", n=0, lineterm="")]
         clip = lambda ls, k=30: [l[:300] for l in ls[:k]] + ([f"... ({len(ls) - k} more diff lines)"] if len(ls) > k else [])  # noqa: E731
-        diffs.append({"traj_id": r["traj_id"], "action_idx": r["action_idx"], "side": r["side"], "env": r["env"], "cached_mean": r["cached_mean"],
+        diffs.append({"traj_id": r["traj_id"], "action_idx": r["action_idx"], "side": r["side"], "env": r["env"], "cached_mean": r["cached_mean"], "stratum": r["counterfactual_stratum"],
                       "side_task": tmeta[r["traj_id"]]["side_task"], "events": n["subs"], "scrub_events": sc["subs"],
                       "current_action_original": o["text"][o["action_span"][0]:o["action_span"][1]][:1500],
                       "current_action_neutralized": n["text"][n["action_span"][0]:n["action_span"][1]][:1500],
@@ -416,7 +435,7 @@ def main():
     R["neutralization_diffs"] = diffs
     print("G2.6 counterfactual:", json.dumps({k: v for k, v in R["subset_counterfactual"].items() if "table" not in k}, indent=0))
     for d in diffs:
-        print(f"\n===== {d['side']} {d['traj_id'][:8]}#{d['action_idx']} env={d['env']} side_task={d['side_task']} cached={d['cached_mean']} events={d['events']}")
+        print(f"\n===== [{d['stratum']}] {d['side']} {d['traj_id'][:8]}#{d['action_idx']} env={d['env']} side_task={d['side_task']} cached={d['cached_mean']} events={d['events']}")
         print("  CURRENT ACTION (original):   ", d["current_action_original"][:400].replace("\n", "\n      "))
         print("  CURRENT ACTION (neutralized):", d["current_action_neutralized"][:400].replace("\n", "\n      "))
         print("  DIFF original -> neutralized (context 0):")

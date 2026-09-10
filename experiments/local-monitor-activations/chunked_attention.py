@@ -24,7 +24,10 @@ from __future__ import annotations
 import torch
 
 NAME = "chunked_eager"
-TARGET_ELEMS = 1 << 28          # ~1 GiB of fp32 scores per chunk
+TARGET_ELEMS = 1 << 28          # ~1 GiB of fp32 scores per chunk (used only when CHUNK_SIZE is None)
+CHUNK_SIZE: int | None = None   # fixed query-chunk length; set it (run_monitor --attn-chunk-size) so the
+                                # reduction order is the same for every prompt in a run (G1: chunking changes
+                                # logits by up to ~1.5 through MoE routing flips)
 
 
 def chunked_eager_attention_forward(module, query, key, value, attention_mask=None, scaling=None,
@@ -49,7 +52,10 @@ def chunked_eager_attention_forward(module, query, key, value, attention_mask=No
     sinks = sinks.to(torch.float32).view(1, H, 1, 1)
 
     out = torch.empty(B, H, Q, D, dtype=value.dtype, device=dev)
-    chunk = max(16, min(Q, TARGET_ELEMS // max(1, H * (K if sliding_window is None else min(K, Q + sliding_window)))))
+    if CHUNK_SIZE is not None:
+        chunk = max(1, min(Q, int(CHUNK_SIZE)))
+    else:
+        chunk = max(16, min(Q, TARGET_ELEMS // max(1, H * (K if sliding_window is None else min(K, Q + sliding_window)))))
     for s in range(0, Q, chunk):
         e = min(Q, s + chunk)
         qp = q_pos[s:e]                                                    # [c]
