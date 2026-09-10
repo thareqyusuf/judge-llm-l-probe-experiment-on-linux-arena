@@ -19,6 +19,39 @@ the prompts verbatim, so the reviewer can see what was asked vs what was run.
 
 ---
 
+## 2026-09-10 — G4.2 consistent-high re-run: rev-3 runner reproduces pass 1 bitwise on all 105; generation-side capture 105/105; main pass launched
+
+**Claim.** Over all 105 consistent-high keys, the rev-3 runner's prompt-side activation rows are bitwise equal to pass 1's
+(max|Δ| = **0.0**, 0 mismatching keys), `expected_score` and `digit_dist` are equal on 105/105, the greedy score agrees **105/105**,
+the generation text is identical on 105/105, and the four prompt-side token indices agree on 105/105. The new generation-side capture
+located all three positions on 105/105 (`capture_clean` 105/105, `pre_score` decodes to `>\n` on 105/105, min `digit_token_mass_post`
+0.999998, argmax = parsed score on 105/105, 0 hit the budget). Wall clock 2,701 s vs 2,759 s in pass 1: the
+decode-step hooks add no measurable cost. **Kind:** engineering regression test (general on these 105); it detects code drift against a
+deterministic reference, it does not test correctness beyond what G2/G4.0 established.
+
+**Evidence.** Chain stage `consistent_high` (tmux `mi:g4`, `logs/local-monitor-activations/g4_chain.log`, 21:17:17Z exit 0), 105/105 ok.
+`g4_regression_check.py` → `results/raw/local-monitor-activations/g4_consistent_high_regression_20260910T211741Z.json`; per-action records
+`results/raw/local-monitor-activations/g4_consistent_high_scores_20260910T211756Z_part1.jsonl` (105 lines, 1.2 MB); integrity `g6_integrity_consistent_high_20260910T211756Z.json` (all pass).
+Recompute: `jq '{n_common, n_mismatch_acts, n_mismatch_expected_score, n_mismatch_generation, score_agreement, max_abs_diff_over_all, new_run_capture}' results/raw/local-monitor-activations/g4_consistent_high_regression_20260910T211741Z.json`
+
+**G4.1 re-run against the new dir** (`g4_low_cached_report.py` default args → `results/raw/local-monitor-activations/g4_low_cached_20260910T211908Z.json`,
+figure `g4_low_cached.png` overwritten with the same data plus E_post for the high arm): every score/E number in the G4.1 entry is unchanged
+(as G4.2 guarantees). New: on the high arm `expected_score_post` mean 4.51 vs 1.04 on the low arm
+(Mann-Whitney p = 1.6e-08), and Spearman(E_post, score) = 0.973 on the high arm — E_post is the score, not a second reading.
+Recompute: `jq '.tests_low_vs_high_attack_np.expected_score_post, .spearman_Epost_vs_score' results/raw/local-monitor-activations/g4_low_cached_20260910T211908Z.json`
+
+**Main pass.** Stage `main` started 21:17:17Z on the 1,812 remaining actions in the committed random order; at 20–26 s/action the
+projection is 11–13 h (≈ 08:30–10:30Z on 2026-09-11). Rolling stats every 25, histogram every 200, no halt. The 105 consistent-high keys
+will be recomputed inside main; their equality to `out/consistent_high` is a free second determinism check for G6'.
+
+**Caveats.** Bitwise equality is expected only under identical kernels: `transformers 5.17.0`, `torch 2.14.0+cu130`, `kernels 0.16.1`,
+chunk 256, the same GPU — all recorded in each stage's `run_meta.json`; a package change would break it for a non-bug reason. The commit
+message of `fc40b84` says "E_post == score 40/40" for the low arm; the entry and raw say 38/40 (two split digit distributions).
+
+**Status.** `[verified]` for the regression numbers; main is `[running]`.
+
+---
+
 ## 2026-09-10 — G4.1 low-cached contrast arm: position-matched low-cached attack actions score ~1 → the local score follows the cached label, not `side`
 
 **Claim.** On the 40 attack-trajectory actions whose two cached samples are both ≤ 2 (non-placeholder, drawn from the consistent-high
