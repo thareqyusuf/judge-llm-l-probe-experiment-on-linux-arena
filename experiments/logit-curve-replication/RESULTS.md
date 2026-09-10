@@ -452,6 +452,122 @@ export chain: both multisets equal):
    "scorable" is unused here. Consistent with the paper, inconsistent with
    the L2 entry's headline. Say which is canonical.
 
+### L4 handoff package — 2026-09-10
+
+**Verdict.** Verified but weaker than stated, with one sub-claim not
+delivered. The formatter, manifest and CPU smoke test check out. The
+token-length statistics do not exist: the only raw file is the run the
+script's own docstring calls wrong, REPORT.md's L4.3 reads
+`TOKEN_STATS_PENDING`, the cited figure is absent and its log is empty.
+Separately, the L4 commit added 3.4 MB of Claude Code session transcripts
+to the repo root.
+
+**Pre-flight.** `format_monitor_prompt.py`, `verify_prompt_format.py`,
+`build_manifest.py` and `manifest.json` are unchanged since `b6114ff`.
+Verify raw records commit `4032851` (script not yet committed then; same
+pattern as L2/L3). Commit `6ab2837` ("exp: L4 setup", not the
+`exp(<slug>):` form) tracks four files that are not project files:
+`4e46a300-….jsonl`, `69e093e5-….jsonl`, `c4174914-….jsonl` and
+`c4174914-…/tool-results/bpmslut79.txt` at the repo root. They are Claude
+Code session logs (session ids, account and org UUIDs, bridge session ids,
+full tool output). A masked scan found no token values (`hf_`, `sk-`,
+`gh*_`, `JUPYTER_TOKEN=<value>`), only the names `JUPYTER_TOKEN` and
+`/workspace/.env`. Remove them from the branch before merge; they are not
+gitignored. `REPORT.md` is deleted in the working tree but present at HEAD.
+The claimed figure `l4_token_lengths.png` is not in
+`results/figures/logit-curve-replication/`; `l4_token_lengths.log` is 0
+bytes.
+
+**What the scripts compute (in my words).** The formatter re-implements
+control-tower's history/action formatting, the str_replace diff
+reconstruction, and template fill, reading tool inputs and outputs from
+the L2 export and side-task goal text from a dumped registry file. The
+verifier builds a control-tower `Trajectory` from the HF row *after
+overwriting its outputs with the export's mirror text*, so both sides get
+identical inputs by construction, then compares `build_action_prompt` to
+the formatter on every non-hidden, non-malformed action and stores each
+prompt's sha256. The manifest lists those actions with cached scores and
+the hashes and flags a 200-action pilot. The runner renders, hashes
+against the manifest, chat-templates, hooks every decoder layer to keep
+the last-position output of the prefill pass, greedy-generates, parses
+`<score>`, and computes a digit-token expectation at the score token.
+
+**What was recomputed.**
+
+- Independent re-verification in the paper venv on 313 scorable actions
+  (300 random, seed 12345, plus all 8 str_replace-diff actions and 5
+  `attachment://` actions): control-tower prompt equals the formatter on
+  313/313 and its sha256 equals the manifest on 313/313. On the
+  *unmodified* HF row (no output overwrite) 281/313 match; the 32 that
+  differ are the rename scrub, as expected.
+- Template sha256 `a4a48d03…` equals the paper's `old_action.md`; the
+  paper's headline config routes `mean_action_live_monitor` →
+  `old_action_live_monitor(provide_goals=True)` → that template, so the
+  right template is being matched.
+- Manifest: 17234 actions, `cached_scores` equals the export on all,
+  pilot 100 honest + 100 attack. Matches.
+- Smoke checkpoint (gitignored): `acts_0000.pt` holds two `[28, 1024]`
+  fp16 tensors, no NaN, layer-0/27 norms 6.5/341; `scores.jsonl` has
+  parsed score 5.0 on both, expected score 4.70 / 5.35 with digit-token
+  mass 0.9996 / 0.99999, `prompt_sha256_matches_manifest` true on both.
+  `run_meta.json` shows a second invocation finishing with
+  `n_actions_this_run: 0`, which is the resume evidence; it is not in the
+  committed log.
+- Token lengths: `l4_token_lengths_20260910T052617Z.json` reports
+  median = p95 = max = 2 tokens for every prompt on both tokenizers. The
+  committed `token_lengths.py` docstring says this run took `len()` of a
+  BatchEncoding and is wrong; the fixed script has not been run (no
+  second raw file). The tokenizers are not in any local HF cache, so I did
+  not reproduce them offline. From the character stats (median 99.6k,
+  p95 282k, max 499k chars) the prompts are roughly 25k / 70k / 125k
+  tokens, an estimate only. The model decision that TASK.md ties to these
+  numbers is therefore unsupported.
+
+**Dumbest ways this could be wrong, and what rules each out.**
+
+1. *"Byte-identical to control-tower" is measured on inputs that are not
+   what the monitor saw, and the claim's caveat understates how much.*
+   Rendering all 17234 prompts: **1626 contain `attachment://`
+   placeholders** (162 honest, 1464 attack = 31% of attack prompts) across
+   43 trajectories, because a placeholder in one action's input or output
+   propagates into every later prompt of that trajectory. 29 of the 200
+   pilot prompts (28 attack) are affected. The entry's caveat mentions
+   empty stored prompts and the 39 renames, not this. For those prompts
+   the pod will score text the cached monitor never saw.
+2. *The verifier can't fail on outputs.* It copies export outputs into the
+   HF row before building the control-tower trajectory, so output
+   handling is compared formatter-vs-formatter on identical strings. That
+   is what "same inputs" means and it is stated, but it means the check
+   is purely of formatting code, not of data.
+3. *Manifest pool ≠ L3 pool.* 17234 excludes the 7 honest and 86 attack
+   malformed actions that the cached monitor did score and L3 keeps. The
+   pod run will have no local score for them; any cached-vs-local
+   comparison is on 12487, not 12494.
+4. *Smoke test proves little.* Two shortest pilot prompts (1.7k tokens),
+   CPU, bf16, a 0.6B model, thinking off. With `enable_thinking=False` the
+   chat template appends an empty `<think>` block, so the captured "last
+   prompt token" is the newline after `</think>`, a different position
+   than the thinking-on pod configuration will capture. Nothing about
+   gpt-oss's channel parsing, 100k-token prompts, or CUDA is exercised;
+   the entry says so.
+5. *"10" folded into "1".* `expected_score` renormalises over single-token
+   digits; on Qwen "10" is two tokens, so P(10) is absorbed into P(1).
+   Recorded in the output, harmless for a 0–9 mass check, wrong if
+   anyone reads `expected_score` as a 0–10 expectation.
+6. *Wrong template.* Ruled out by the config trace above and the sha256.
+7. *Side-task goals from a different registry version.* Not ruled out by
+   anything here; the goals text comes from `dump_side_task_goals.py`
+   against the v1.0.1 registry and is asserted equal to control-tower's
+   `get_side_task_goals` output only through the byte-identical prompt
+   check, which uses the same source.
+
+**On "L4 was not possible".** REPORT.md's L1 entry says L4 is impossible
+*mirror-only* because the mirror strips arguments. The HF dump supplied
+arguments, which is why L4.1 could run. The HF dump's arguments are
+themselves placeholders on 247 actions, so for 1626 prompts L4 is still
+impossible in the sense that matters. The token-length step was not
+completed at all.
+
 ---
 
 ## Dead ends
