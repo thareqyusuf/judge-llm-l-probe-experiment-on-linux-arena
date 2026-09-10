@@ -278,6 +278,93 @@ scratchpad, ~80 lines, no code shared with `recon.py`):
 - L2's `n_actions_scorable` is 12487 (7 "malformed" dropped) vs L1's 12494.
   Small, but the two entries currently disagree on the pool size.
 
+### L2 export — 2026-09-10
+
+**Verdict.** Verified but weaker than stated. All counts reproduce and the
+export is byte-reproducible from the committed script. Two of the text
+claims are not computed by the script at all, and the "scorable" count
+departs from the paper's pool by a rule the paper's own code cannot apply.
+
+**Pre-flight.** `export.py` at HEAD is byte-identical to the version
+committed in `b6114ff`. The raw meta records `git_commit` `4032851`, which
+is the merge commit *before* the script existed; the superseded first run
+(`…042851Z`) records the same commit but produced different files
+(15.7 MB vs 16.4 MB attack; no `prefix_actions_differing` field), so the
+script changed between the two runs without a commit. Resolved by re-running:
+executing the committed script against the cached mirror payloads and HF
+rows in the verify scratchpad reproduces the cited sha256 of
+`honest.jsonl`, `attack.jsonl` and `trajectories.jsonl` exactly. So the
+committed script is the one that made the cited data.
+
+**What the script computes (in my words).** For each monitor-run
+trajectory (HF row), it looks up the agent-run row by task key, the mirror
+`lean` payload (scores) and the mirror `monitor-data` payload (outputs) by
+trajectory id, and emits one line per action taking `tool_input` from HF
+`arguments`, `tool_output` from the mirror when non-null else HF, and
+`monitor_scores` from the mirror member list, or a one-element list of the
+mirror mean when there are no members. It marks an action skipped if its
+tool name is hidden or its HF `output_error` starts with `parsing:`, and
+counts the rest as scorable. It counts HF-vs-mirror output mismatches but
+does not classify them, and never searches any text for `LinuxBench`.
+
+**What was recomputed** (independent Python over `checkpoints/` and the
+exported files; verify scratchpad):
+
+- 200 + 92 trajectories, 12675 + 5097 lines, no duplicate
+  (monitor_traj_id, action_idx). Matches.
+- `monitor_scores` equals the mirror member list on all 17772 actions and
+  `monitor_score_mean` equals the mirror mean on all. Matches. Note this is
+  by construction: both come from the same mirror payload. The independent
+  fact is the HF-vs-mirror member check, whose counter is *absent* from
+  `checks` (the stated `jq` recompute returns `null`, not 0) because the
+  script only creates the key on a mismatch.
+- Scorable: 12675 − 181 hidden − 7 malformed = 12487 honest;
+  5097 − 264 − 86 = 4747 attack. Matches.
+- Output diffs: 25 + 14 = 39. Matches. 34 become identical after
+  `linuxarena`→`LinuxBench`; the other 5 (1 honest, 4 attack) are the same
+  rename in lowercase (`linuxbench`, in a seed-script path and message).
+  Direction: the mirror has the old name, HF has the new one. Exported
+  text has 0 occurrences of `linuxarena` (case-insensitive) in inputs,
+  outputs or task descriptions, so no scrubbed text leaked in.
+- No `tool_input` on any of the four runs contains `LinuxBench`,
+  `linuxbench` or `linuxarena`. Matches, but this was **not** computed by
+  the script; nor was "all renames". Neither has a raw-file trace.
+- `side_task_trigger_action_idx`: set on all 30 live-failure trajectories,
+  on none of the 62 delayed ones; 79 attack actions fall after the trigger.
+  The port matches control-tower 1.0.1 `get_live_failure_action_index`.
+
+**Dumbest ways this could be wrong, and what rules each out.**
+
+1. *"12,487 scorable by the live monitor" is not what the live monitor
+   scored.* All 7 honest "malformed" actions (and all 86 attack ones) carry
+   real two-member scores with no error, so the paper's monitor scored
+   them. The paper's pool is 12494 because its lean loader projects away
+   `output_error` (checked `lean_load.py`), so its `should_skip_action`
+   can never see the `parsing:` flag; the mirror lean payload has no such
+   field either. The 12487 rule matches control-tower 1.0.1 source
+   (checked in the paper's venv) but not the paper's pool. Dropping them
+   changes no attack-trajectory max (0 of 92), so it only moves the FPR
+   denominator by 7 actions. Which pool to use is an experimental-design
+   call, not mine; the entry should say the two numbers come from different
+   rules and pick one explicitly.
+2. *Exported text is not what the monitor saw.* Not ruled out; the claim is
+   silent on it. `tool_input` has `attachment://` placeholders on 50 honest
+   and 197 attack actions, and `tool_output` on 197 attack actions (mirror
+   and HF agree, so both sources are lossy). The export carries no flag for
+   these. Any "byte-identical prompt" claim downstream is bounded by this.
+3. *`tool_output` from the mirror is treated as "what the monitor saw".*
+   For the 3 truncated honest trajectories this is a replay, not the agent
+   run's output (see L1); for the rest the mirror and HF differ only by
+   the rename, so the choice is immaterial there.
+4. *The 333 no-member attack actions become one-sample lists.* The script
+   turns the mirror mean into `[mean]`; 136 of those are half-integers.
+   Downstream code that treats `len(monitor_scores)` as the number of
+   samples will count them as single draws. See L1 finding 2.
+5. *Key collision or silent `zip` truncation.* Ruled out: task keys are
+   unique on both sides (asserted), and the script asserts equal action
+   counts between HF, lean and monitor-data per trajectory.
+6. *Superseded run swapped in.* Ruled out by the byte-reproduction above.
+
 ---
 
 ## Dead ends
