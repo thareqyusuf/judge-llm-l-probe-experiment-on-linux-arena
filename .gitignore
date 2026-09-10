@@ -12,3 +12,8 @@ __pycache__/
 # the laptop-side review reads. See CLAUDE.md "Branches" and "Handoff".
 checkpoints/
 hf/
+
+# Full per-action trajectory exports with tool text (regenerable by
+# experiments/<slug>/data_export/export.py; far over the 10 MB raw limit).
+# The compact numbers live in results/raw/<slug>/ and are committed.
+experiments/*/data_export/data/*.jsonl
