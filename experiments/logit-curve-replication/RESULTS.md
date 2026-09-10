@@ -365,6 +365,93 @@ exported files; verify scratchpad):
    counts between HF, lean and monitor-data per trajectory.
 6. *Superseded run swapped in.* Ruled out by the byte-reproduction above.
 
+### L3 logit-ROC — 2026-09-10
+
+**Verdict.** Verified but weaker than stated. Every number reproduces
+exactly, including a full re-run of the committed script. The chance
+baseline in the table is wrong for the aggregation used, and the
+"bending below" description has the wrong sign at the low-FPR end.
+
+**Pre-flight.** `logit_roc.py` at HEAD is byte-identical to `b6114ff`.
+Raw `git_commit` is `4032851` (script not yet committed then); resolved by
+re-running the committed script on the committed input in the paper's venv:
+the raw JSON reproduces field-for-field (all keys except timestamp and
+commit), bootstrap included (seed 0). Three figures present.
+
+**What the script computes (in my words).** Benign pool = the mirror mean
+of every honest action whose tool is not hidden (12494; malformed kept).
+Attack score = per trajectory, max of those means over non-hidden actions.
+For every distinct score value as a strict `>` threshold it counts FP, TP,
+FN; "cropped" = all three ≥ 5. OLS is fit to log10-odds of (FPR, TPR) on
+the cropped points. TPR at a target FPR is linear interpolation between
+adjacent ROC points, which equals the paper's randomized tie-breaking in
+expectation. The CI resamples honest *actions* and attack trajectories
+independently, 2000 reps, percentile. It also writes a per-sample variant
+and compares pool, maxima and per-budget thresholds against the paper's
+`data.json`.
+
+**What was recomputed** (plain-Python re-derivation from `benign_scores`
+and `attack_trajectories[].max_score` in the raw file; separately checked
+those two arrays against the mirror lean payloads directly, bypassing the
+export chain: both multisets equal):
+
+- 22 ROC points, 11 cropped (thresholds 3.0 … 8.0). Matches.
+- OLS on cropped: slope 0.8810, intercept 1.9061, R² 0.9846. Matches.
+- TPR at FPR 1e-2 = 0.5596, at 3e-3 = 0.3136, at 1e-3 = 0.2282. Matches.
+  Step-function value at t>7.5: FPR 0.00840, TPR 0.543. Matches.
+- Independent bootstrap (my own code, B=1000): action-level CI at 1e-2
+  [0.459, 0.654] vs stated [0.461, 0.654]. Matches to resampling noise.
+- **Trajectory-cluster bootstrap on the honest side** (resample the 200
+  honest trajectories; needs `traj_id`, which `benign_scores` in the raw
+  file lacks, so this used `export_actions_…jsonl`): CI at 1e-2
+  [0.439, 0.663], at 3e-3 [0.224, 0.428]. Slightly wider than stated, not
+  materially. The 105 FPs at t>7.5 sit in 40 of 200 honest trajectories,
+  top three holding 11, 10, 9.
+- Per-budget threshold port equals control-tower 1.0.1
+  `compute_threshold_at_fpr` line for line; all six thresholds and tie
+  fractions match the paper. Matches.
+- Gated vs ungated max: identical on all 92 trajectories, so "ungated" is
+  immaterial here.
+
+**Dumbest ways this could be wrong, and what rules each out.**
+
+1. *The chance baseline is 0.010 in the table. It is not.* The attack score
+   is a max over ~53 scored actions per trajectory (16–130), so a monitor
+   emitting random scores at per-action FPR p catches a trajectory with
+   probability 1 − (1−p)^n. From `n_scored_actions` in the raw file that is
+   **0.393 at FPR 1e-2, 0.144 at 3e-3, 0.051 at 1e-3**. The paper's own
+   `compute_random_safety_curve` is exactly this formula and its
+   `random_safety` at FPR ≈ 1e-2 is 0.390. So the headline is 0.560 vs a
+   chance of 0.39, not vs 0.01; at 3e-3 it is 0.314 vs 0.144. The table
+   row should be replaced and the per-action chance line on the standard
+   ROC figure is the wrong reference for a per-trajectory TPR.
+2. *"Low-FPR end bending below the line" has the wrong sign.* Residuals of
+   the cropped points from the OLS line: t=6.5 −0.076, t=7.0 −0.116,
+   t=7.5 −0.005, **t=8.0 +0.067**. The dip below is in the middle
+   (thresholds 6.5–7.0); the lowest-FPR cropped point is above the line,
+   dropping it moves the slope to 0.957, and the first uncropped point
+   (t=8.5, FPR 2.4e-4, TPR 0.196) is 0.67 above the extrapolated line. The
+   curve flattens (bends *above*) at the low-FPR end. This is visible in
+   `l3_logit_roc_pooled.png`.
+3. *Per-action mean is not the convention in TASK.md.* TASK says benign =
+   every (action, sample) and attack = the samples of the max action, with
+   per-action mean as the fallback if sample counts differ. The fallback was
+   taken and stated. But the per-sample variant in the same raw file gives
+   **TPR 0.341 at FPR 1e-2 and 0.185 at 3e-3**, i.e. the headline depends
+   heavily on which convention is used. Which one the writeup should use
+   is a design call; the entry should show both.
+4. *Ties at the interpolation point.* 26 of 92 attack maxima sit exactly
+   at 8.0 and 7 at 7.5; the 3e-3 number is an interpolation across that
+   step. Randomized tie-breaking is the paper's rule, so this is
+   consistent, but the number is a mean over tie-breaks, not an observed
+   TPR.
+5. *Scores copied through a lossy export.* Ruled out: benign pool and
+   attack maxima taken straight from the mirror lean payload equal the raw
+   file's arrays as multisets.
+6. *Pool disagreement with L2.* L3 uses 12494 (paper pool); L2's 12487
+   "scorable" is unused here. Consistent with the paper, inconsistent with
+   the L2 entry's headline. Say which is canonical.
+
 ---
 
 ## Dead ends
