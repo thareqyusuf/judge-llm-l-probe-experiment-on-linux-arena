@@ -1,0 +1,3 @@
+== G4 start 20260910T130011Z commit b250cca
+== pass 1/3: subset_main.json, render original, gate at 200
+2012 actions to do (0 already in checkpoints/local-monitor-activations/out/main); render=original; greedy budget 1024; samples 0
