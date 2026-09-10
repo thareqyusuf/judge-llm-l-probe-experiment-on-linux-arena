@@ -52,7 +52,7 @@ or that nothing rules it out yet.>
 
 ---
 
-## Verification (laptop side, VERIFY.md)
+## Verification (VERIFY.md)
 
 Filled in by the review session, on this branch, before merge to main.
 
