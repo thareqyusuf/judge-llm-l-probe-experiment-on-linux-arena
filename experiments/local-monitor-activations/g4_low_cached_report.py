@@ -66,6 +66,7 @@ def main():
     ap.add_argument("--low", type=Path, default=OUT / "low_cached")
     ap.add_argument("--high", type=Path, default=OUT / "consistent_high")
     args = ap.parse_args()
+    args.low, args.high = args.low.resolve(), args.high.resolve()
     ts = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     low = load(args.low); high = load(args.high)
     trajs, _ = mp.load_trajs()
