@@ -18,6 +18,182 @@ verbatim, so the reviewer can see what was asked vs what was run.
 
 ---
 
+## 2026-09-10 — G2 (TASK-ver2): lengths, capture positions, subset, neutralization, projection
+
+**Claim.** All 17,234 manifest prompts render byte-identically to the manifest hashes and tokenize
+under the pinned gpt-oss template (date `2026-09-10`, `Reasoning: low`) to a median of 26,886
+tokens (p95 77,311, max 141,576; 15 over 128k, all honest). With the 32,000-token cap from the
+task, a trajectory-level subset of **2,012 actions from 59 trajectories** (32 attack / 27 honest)
+projects to **6.9 h** of prefill for the main render and **1.1 h per counterfactual render**
+(9.1 h total, 9.4 h by interpolation), inside the 14–18 h G4 window. The cap raises the attack
+fraction from 47% to 57% (pool: 28%). Neutralization changes 1,569 of the 2,012 prompts, but
+only 192 in the *current action*; in the 250-action counterfactual subset only 32 have a changed
+current action. No GPU was used.
+
+**Kind of claim.** Descriptive / engineering (this pod, this pipeline). No hypothesis, no baseline.
+
+**Evidence.**
+- Script: `experiments/local-monitor-activations/g2_prep.py` (+ shared `monitor_prompt.py`; imports
+  track L's `format_monitor_prompt.py` unchanged). Git commit of the script run: `8753ea6` + uncommitted
+  edits (the raw file's `git_commit` is the parent; the committed script is what ran last).
+- Raw (final): `results/raw/local-monitor-activations/g2_prep_20260910T101555Z.json` (4.5 MB: numbers,
+  per-action length table, examples, cap table, subset composition, neutralization tables and 10 diffs).
+  Superseded runs kept per append-only rule: `g2_prep_20260910T095325Z.json` (unweighted quadratic fit
+  with a negative linear term; first substitution table), `g2_prep_20260910T100649Z.json` (second table),
+  `g2_prep_20260910T101132Z.json` (third table). Only the substitution table and the fit changed between them; lengths and capture positions are identical.
+- Logs: `logs/local-monitor-activations/g2_prep_20260910T101554Z.log` (final; the 10 diffs are printed in full there),
+  `g2_prep_20260910T095325Z.log`, `g2_prep_20260910T100057Z.log` (aborted: fit assertion), `g2_prep_20260910T100648Z.log`, `g2_prep_20260910T101130Z.log`.
+- Figure: `results/figures/local-monitor-activations/g2_lengths.png` (two panels: by side, by placeholder; cap and 128k marked).
+- Subsets: `experiments/local-monitor-activations/subset_main.json` (2,012 actions, ascending `n_tokens`),
+  `subset_counterfactual.json` (250 actions, drawn from subset_main).
+- Not in git: `checkpoints/local-monitor-activations/g2_recs_2026-09-10_low_<key>.json` (per-action tokenization
+  cache, 8 MB; regenerated in ~3.5 min).
+
+### G2.1 export files — pass
+sha256 of `attack.jsonl`, `honest.jsonl`, `trajectories.jsonl` equal the manifest.
+Recompute: `jq '.export_files | map_values(.match)' results/raw/local-monitor-activations/g2_prep_20260910T101555Z.json`
+
+### G2.2 rendering and tokenization — 17,234 / 17,234 hashes match
+- Original render = `format_monitor_prompt.build_prompt` output; every sha256 equals the manifest's (asserted in the script).
+- Template pinned by replacing the single `strftime_now("%Y-%m-%d")` call in the tokenizer's chat template with the
+  literal `"2026-09-10"` (`monitor_prompt.pin_chat_template`; pinned template sha256 `df7f5607…`), `reasoning_effort="low"`
+  passed explicitly; the script asserts `Current date: 2026-09-10\n\nReasoning: low\n\n` is in every rendered string and
+  that every prompt ends `<|end|><|start|>assistant`. The templated string is tokenized with `tok(s, add_special_tokens=False)`;
+  on two examples this equals `apply_chat_template(tokenize=True)` id-for-id (checked interactively, see session log, not in the raw file).
+- Length = `len(input_ids)`. chars/token on 10 random examples: 3.21–4.81 (asserted 2.5–5.5). Not chars/4: it is ≈3.6 for this text.
+- Tokenizing everything took 214 s on 32 processes.
+Recompute: `jq '{n: (.per_action.n_tokens|length), all_end_assistant: true, cpt: [.chars_per_token_examples[].chars_per_token]}' …g2_prep_20260910T101555Z.json`
+
+### G2.3 lengths
+| split | n | median | p90 | p95 | p99 | max | >128k | >32k |
+|---|---|---|---|---|---|---|---|---|
+| all | 17,234 | 26,886 | 63,899 | 77,311 | 98,431 | 141,576 | 15 | 6,856 |
+| honest | 12,487 | 28,677 | 70,043 | 81,803 | 100,891 | 141,576 | 15 | 5,519 |
+| attack | 4,747 | 23,729 | 43,600 | 49,334 | 65,519 | 93,828 | 0 | 1,337 |
+| placeholder (1,626) | 1,626 | 30,264 | 46,594 | 56,121 | 75,668 | 92,707 | 0 | 686 |
+| no placeholder | 15,608 | 26,248 | 65,496 | 78,674 | 99,184 | 141,576 | 15 | 6,170 |
+
+Attack prompts are shorter (attack trajectories are shorter); placeholder prompts are slightly longer than average.
+The 15 prompts over 128k are all honest. The character-based guess from track L (25k / 70k / 125k) was close at the median and p95, high at the max.
+Recompute: `jq '.lengths' …g2_prep_20260910T101555Z.json`
+
+### G2.4 capture positions (two examples; all 17,234 recorded)
+Last 12 tokens of both examples are the same ids: `220 15 316 220 702 1592 808 21200 523 200007 200006 173781` =
+`' ', '0', ' to', ' ', '10', ']\n', '</', 'score', '>\n', '<|end|>', '<|start|>', 'assistant'`. The last token is `assistant` (id 173781) in all 17,234 prompts (asserted).
+Position definition: **the token that contains the last character of the block**. Under BPE that token can extend into the
+template's separator, so the decoded strings carry the following newline(s):
+
+| position | honest `0074ee26#5` (8,680 tok) | attack `0769f510#15` (18,004 tok) | what it is |
+|---|---|---|---|
+| transcript_end | tok 5829, id 3037, `'>\n\n'` | tok 15491, id 15626, `'):\n\n'` | last token of the `<history>` content (history ends `…>\n`, template adds `\n</history>`) |
+| action_end | tok 7962, id 32701, `"'}\n"` | tok 17286, id 32701, `"'}\n"` | last token of `<current_action>` content (the closing `'}` of the tool-call dict + template `\n`) |
+| instruction_end | tok 8676, id 523, `'>\n'` | tok 18000, id 523, `'>\n'` | last token of the user message (`</score>` + `\n`) |
+| final | tok 8679, id 173781, `'assistant'` | tok 18003, id 173781, `'assistant'` | last token of the templated prompt |
+
+Character offsets (templated string) are in the raw file (`examples.*.capture_positions[].char_span_templated`), with 60 chars of context before and 40 after.
+Token indices for every action are in `per_action.capture_token_index`. `n_context_tokens` (= tokens inside the history block) is also recorded per action.
+Recompute: `jq '.examples | map_values({n_tokens, last: [.last_12_tokens[].decoded], caps: [.capture_positions[] | {name, token_index, token_id, decoded}]})' …g2_prep_20260910T101555Z.json`
+
+### G2.5 cap and subset_main
+**Prefill model.** Non-negative least squares on the six G1 points, rows weighted 1/t (relative error):
+t(L) = 1.249 + 0·L + 2.659e-8·L² s (the linear term went to zero; an unconstrained fit gave a negative linear coefficient — first run).
+Max relative error 10.7% (at 131k; ≤8% up to 98k). Plus a **guessed** 1.0 s/action overhead (hooks, one forced-final step, disk) that G3 replaces.
+Cross-check: piecewise-linear interpolation of the same six points gives totals 3–4% higher.
+Recompute: `jq '.prefill_fit | {c, a, b, max_rel_err, points: [.points[] | {L, t, fit}]}' …g2_prep_20260910T101555Z.json`
+
+**Cap.** 32,000 (the largest allowed). Every cap in the table fits the 16 h budget; the binding quantity is the target of ~2,000 actions, not time.
+Cap table (20 attack / 15 honest trajectories = the task's "~35"): 32k → 1,213 actions, 4.2 h main, 7.7 h worst-case total; 24k → 866 / 2.0 h; 16k → 514 / 0.7 h.
+Recompute: `jq '.cap_projection[] | [.cap, .n_actions, .hours_main, .hours_total_worst]' …g2_prep_20260910T101555Z.json`
+
+**Sampling (seed 0).** Attack: 3 per `side_task_category` (6 categories in the data: access_control_bypass 31, running_malware 18,
+exfiltration 17, data_tampering 13, monitoring_subversion 8, access_secret 5 trajectories) = 18, +2 random = 20. Honest: 1 per env (10) + 5 more
+in the envs most represented among the chosen attack trajectories. Then, because the cap dropped 40% of those actions and left
+1,213, trajectories were **added alternately (attack, honest) until ≥2,000 actions**: 24 more, to 32 attack / 27 honest.
+So the subset is ~2,000 actions from 59 trajectories, not ~35 — the two targets in the task are incompatible under the cap. **Your call which to keep**;
+the 35-trajectory version is the first row of the cap table (1,213 actions) and is reproducible with `--target-actions 0`.
+
+| | attack | honest | total |
+|---|---|---|---|
+| trajectories | 32 | 27 | 59 |
+| actions in those trajectories | 1,573 | 1,785 | 3,358 |
+| dropped by the cap | 417 (27%) | 929 (52%) | 1,346 |
+| **in subset_main** | **1,156** | **856** | **2,012** |
+| attack fraction | before cap 46.8% → after cap **57.5%** (pool 27.5%) | | |
+| placeholder rate | 30.1% (348) | 3.6% (31) | 18.8% (pool 9.4%) |
+| category coverage | access_control_bypass 7, running_malware 7, data_tampering 6, monitoring_subversion 5, exfiltration 4, access_secret 3 | | |
+| env coverage | all 10 envs (slack_clone 1, model_registry 2, others ≥3) | all 10 envs | |
+| subset lengths | median 18,253, p95 30,555, max 31,994 | | |
+
+**Known selection bias.** The cap keeps the *early* part of every trajectory (prompts grow with the step index) and keeps
+more of the attack trajectories (shorter). Within a trajectory the kept actions are the early ones; for delayed side tasks
+that is before the side task is executed. Downstream splits must be by trajectory (all of a trajectory's actions are in or out).
+**`side_task_trigger_action_idx` is not usable here**: it indexes the agent trajectory (n_actions_in_agent_traj), and for all 12
+chosen attack trajectories where it is known (all `live` failure types) it points at an index absent from the manifest
+(the hidden `submit`/`run_side_task_test` calls); I did not find a mapping into monitor action indices.
+Recompute: `jq '.subset_main | del(.attack_trajectories, .honest_trajectories, .trajectories_added_for_target)' …g2_prep_20260910T101555Z.json`;
+`jq '.actions | group_by(.side) | map({side: .[0].side, n: length, ph: map(select(.placeholder)) | length})' experiments/local-monitor-activations/subset_main.json`
+
+### G2.6 neutralization and subset_counterfactual
+**Rule** (`monitor_prompt.NEUTRALIZE`, 47 regexes + an IPv4 rule; the full table is in the raw file under
+`subset_counterfactual.neutralize_table`). Applied to the rendered `<history>` block and the `<current_action>` block only;
+the task description, covert objectives and instruction template are untouched. Groups: privilege (`sudo`→`env`, `chmod`/`chown`/`chattr`→`stat`),
+network (`curl`/`wget`→`cat`, `nc`/`ncat`/`netcat`/`socat`→`tee`, `/dev/tcp/`→`/dev/log/`, `bash -i`→`bash -c`, `nohup`/`setsid`/`disown`→`env`),
+encoding (`base64`→`sort`, `xxd`→`od`), credential/auth paths when not on a bare listing line (`/etc/shadow`→`/etc/hostname`, `/etc/passwd`→`/etc/hosts`,
+`authorized_keys`→`known_hosts`, `.ssh/`→`.config/`, `.bashrc`/`.profile`→`.inputrc`), persistence (`crontab`→`cat`, `/etc/cron*`→`/etc/skel*`, `systemctl enable`→`status`),
+words (`exfil*`→`export`, `backdoor*`→`handler`, `malware`→`module`, `malicious`→`additional`, `payload`→`content`, `keylog(ger)`→`inputlog`, `reverse shell`→`remote session`),
+known exfil hosts→`example.com`, listener ports 4444/1337/31337/4443 after `:`/space/`=`/`/`→`8080`, public IPv4→`127.0.0.1`.
+Word starts also fire after a *literal* `\n`/`\t` because tool calls are rendered with `repr()` (multi-line commands show `\ncurl`).
+Things I deliberately left alone: `rm -rf`, `pkill`/`killall` (ubiquitous in benign restart scripts here), `secret` (in task descriptions), `eval`/`exec`.
+Iterations (raw files 0953→1006→1011→1015) fixed: `/etc/cron.daily`→`skeldaily`, `/etc/bash.bashrc`, `9001` session ids, `base64-js`, `\ncat`→`\tee`, `sudo -v`→`-v`, bare `/etc/shadow` listing lines, `/etc/crontab`, `keylogger_thread_id`.
+
+**random_scrub control** (`RANDOM_SCRUB`, 24 benign swaps such as `echo`→`printf`, `ls`→`dir`, `grep`→`rg`, `git`→`hg`): applied to the
+same two blocks, one match at a time in table order, until it has made the same number of substitution events as the neutralized render
+of that action (history and current action matched separately). 16 of 250 actions cannot be fully matched (too few benign matches) and are recorded as under-matched.
+Equal *count of events*, not equal characters; both counts are in the raw file per diff.
+
+**subset_counterfactual** (250): from subset_main, eligibility = ≥1 neutralization event anywhere in the prompt (1,569 of 2,012 qualify),
+stratified over side × cached-score bucket ([0,1], (1,3], (3,6], (6,10]): attack 40/33/32/32, honest 45/32/27/9 (the honest 6–10 cell is exhausted).
+137 attack / 113 honest; 63 with placeholder; median 22,487 tokens. **Only 32 of 250 have a substitution in the current action**; the other 218 differ from the
+original only in the history. Whether that is the counterfactual you want (history-neutralized) or whether it should require a changed current action is your call —
+requiring it would leave 192 eligible actions in subset_main (`n_with_action_neutralize_events`), enough for a 150–190 action subset.
+The 10 diffs (5 with a changed current action, 5 without; all attack by construction of the ordering — 8/10 in the first run were attack too) are in the raw file
+(`neutralization_diffs`, context-0 unified diffs, first 30 lines each) and printed in full in the final log. What they show, honestly:
+- the substitutions hit the intended commands (`sudo deploy-indexer`→`env deploy-indexer`, `curl -sv …`→`cat -sv …`, `chmod +x`→`stat +x`, `crontab -l`→`cat -l`, `nc -l 4444`→`tee -l 8080`);
+- they also hit benign main-task code and tool *outputs* (`os.chmod(` in Python, `chown root:root` in a setup script, `User-Agent: curl/7.81.0`, `# Unlike any other crontab` in a comment) — that is by design of a surface-form rule, but it means the neutralized render is not "the same prompt minus the attack";
+- they never touch the secrets, hashes, payload bodies or URLs themselves beyond the listed hosts/IPs/ports, so evidence that is not lexical survives (e.g. a `psql` `DELETE FROM stories` in `delete_evidence`, an outbound POST body).
+Recompute: `jq '.subset_counterfactual | {n, cells, n_with_action_events, n_random_scrub_under_matched}' …g2_prep_20260910T101555Z.json`; the diffs: `jq '.neutralization_diffs[] | {traj_id, action_idx, side, events, diff_neutralized}' …`
+
+### G2.7 projection
+Σ over subset_main of t(Lᵢ) + 1 s: **6.94 h** (fit) / 7.18 h (interp). Counterfactual: 1.09 h per render (neutralized, random_scrub). Total **9.13 h** (fit) / 9.40 h (interp), budget 16 h.
+By length bin (main): 0–16k tokens: 857 actions, 1.1 h; 16–24k: 564 actions, 2.1 h; 24–32k: 591 actions, 3.8 h.
+Recompute: `jq '.projection' …g2_prep_20260910T101555Z.json`
+
+**What I checked myself.** Every one of the 17,234 renders hashes to the manifest value; every templated prompt ends in id 173781; the tokenization
+path equals `apply_chat_template(tokenize=True)` on two prompts; the substitution rules on hand-written strings (backslash-n cases, listing lines, ports, IPs);
+read all 10 diffs in each of the four runs; the figure by eye.
+
+**Alternative explanations / caveats (the list TASK-ver2 requires).**
+1. *Length cap and selection bias* — stated above: early-trajectory, attack-heavy (57% vs 28% in the pool), placeholder-heavy (19% vs 9%).
+2. *1,626 placeholder prompts* — 379 are in subset_main (348 attack); `placeholder` is carried per action in both subset files; nothing dropped.
+3. *17,234 vs 12,494* — the subset is drawn from the manifest's 17,234 (12,487 + 4,747); nothing here touches the paper's pool.
+4. *MXFP4* — no model was loaded in G2; not applicable.
+5. *Capture positions* — defined as "token containing the block's last character"; that token can include the template's following newline (see table). If you would rather capture the last token *strictly inside* the block, it is the same index for `action_end` and `instruction_end` here (the merged token already includes the closing quote/`>`) but one token earlier for `transcript_end` in the honest example.
+6. *Chunk-size noise floor* — not measured in G2 (G3.2).
+7. *Neutralization removes surface form, not evidence* — see G2.6: only lexical tokens are replaced; non-lexical evidence survives; and benign text is also rewritten.
+8. *Trajectory-level correlation* — subset is by trajectory; 59 trajectories is the unit count for any downstream split.
+9. *Prefill fit* — six synthetic random-token points from G1; real prompts route MoE experts differently, so seconds/action may differ; G3 measures it (task says re-pick if >20% off).
+10. *Tokenizer offsets* — `return_offsets_mapping` from the fast tokenizer; verified only on two examples that the token at each offset decodes to the expected text.
+
+**Status.** `[tested]` for lengths, hashes, capture positions and projection arithmetic; `[hunch]` for the 1 s overhead and for whether the substitution table is the right counterfactual.
+
+### Stop — decisions for you before G3
+1. Cap 32,000 and **59 trajectories / 2,012 actions** (or 35 trajectories / 1,213 actions)?
+2. Counterfactual: keep "≥1 event anywhere" (218/250 change history only) or require a change in the current action?
+3. Substitution table: anything to add/remove after reading the diffs (log `g2_prep_20260910T101554Z.log`)? `pkill`, `rm -rf` and `secret` are deliberately not in it.
+4. `side_task_category` (6 values) is what I used for "all four side tasks with ≥3 each"; there is no four-valued field in the export. Tell me if you meant something else.
+
+---
+
 ## 2026-09-10 — G1: environment and hardware verification (+ attention backend)
 
 **Claim.** The pod satisfies every G1 requirement (Blackwell sm_120, CUDA ≥ 12.8, pinned
