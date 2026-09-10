@@ -95,6 +95,13 @@ are not on the pod. Nothing after G1, including G2's token counts, can run until
 `checkpoints/local-monitor-activations/data/export/` (the script checks their sha256 against the manifest).
 Recompute: `jq '.data_files.files | map_values(.present)' results/raw/local-monitor-activations/g1_env_20260910T070739Z.json` → all `false`.
 
+**Update 2026-09-10 09:25 UTC — blocker cleared.** The user copied the three files to
+`checkpoints/local-monitor-activations/data/export/`. sha256, byte count and line count of each equal the manifest
+(attack 5,097 lines / honest 12,675 / trajectories 292). Raw: `results/raw/local-monitor-activations/g1_export_files_20260910T092543Z.json`
+(written by an inline sha256 check, no model). Recompute: `jq '{all_match, files: (.files | map_values(.match))}' results/raw/local-monitor-activations/g1_export_files_20260910T092543Z.json`;
+independently: `sha256sum checkpoints/local-monitor-activations/data/export/*.jsonl` vs `jq '.data_files' experiments/logit-curve-replication/gpu/manifest.json`.
+`g1_env.py` was not re-run. Also since the G1 commit: `4c5308e` pins `kernels` in `infra/constraints.txt` (user's commit).
+
 ### G1.5 gpt-oss-20b — loads in native MXFP4
 Snapshot `6cee5e81…`, 3 safetensors shards, 12.82 GiB on disk. Load 34.6 s with
 `dtype=bfloat16, device_map={"":0}, attn_implementation="eager"`.
@@ -207,12 +214,10 @@ been wired into it.
    touched at G1; all carried forward unchanged. The payloads hold 12,675 + 5,097 = 17,772 actions, of which
    the manifest lists 17,234 as scorable.
 
-**Status.** `[tested]` for every environment fact; G2+ `blocked` on the export files.
+**Status.** `[tested]` for every environment fact. The export-file blocker is cleared (see G1.4 update); G2 awaits your go-ahead and the open questions below.
 
 ### Open questions for you (not my call)
-1. **Export files.** Copy `data_export/data/{honest,attack,trajectories}.jsonl` from the laptop to
-   `checkpoints/local-monitor-activations/data/export/` (61 MB; `scp`/`runpodctl`)? Or ship the 16 GB HF dump and
-   re-run `recon.py` + `export.py` here? G2 cannot start before this.
+1. ~~**Export files.**~~ Done by the user 2026-09-10; verified against the manifest (G1.4 update).
 2. **Attention backend.** I propose running G2–G5 with `chunked_eager`. It needs a runner that registers it:
    either a thin `experiments/local-monitor-activations/run_monitor.py` that imports track L's modules and adds
    `--attn chunked_eager`, or a change to track L's file on its own branch. Which?
