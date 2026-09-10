@@ -170,11 +170,113 @@ per-action scores on the mirror equal the HF dump on every action.
 
 Filled in by the review session, on this branch, before merge to main.
 
-**Verdict.** Verified / Verified but weaker than stated / Not verifiable from what's here / Wrong
+### L1 reconnaissance — 2026-09-10
 
-**What was recomputed.**
+**Verdict.** Verified but weaker than stated. Every number in the L1 claim
+reproduces; two of the five sub-claims say more than the data supports.
+
+**Pre-flight.** Script `recon.py` is byte-identical between the commit that
+added it (`8ac6c1c`) and HEAD; raw file records the scaffold commit
+`4362d82` as stated. Raw + log + RESULTS entry are on the branch (no figure;
+none expected for an audit). Review branch is `vrf/logit-curve-replication`,
+not `exp/`. The `_scan_shard` 600-byte prefilter could silently drop HF rows,
+but the row counts it found (200/200/92/92) equal the API trajectory counts,
+so nothing was dropped.
+
+**What the script computes (in my words).** It downloads two projections of
+five run ids from the public mirror and caches them; hashes the `lean`
+payload the same way the server does; tabulates key sets and histograms per
+run; pairs agent and monitor trajectories by (env, main_task, side_task)
+and compares their tool-name sequences; pulls the same run ids out of the
+local HF jsonl shards and compares, per action, the HF score/member list
+with the mirror's; counts members per action; and counts actions whose tool
+name is not in a hardcoded hidden-tool set. It never touches a model.
+
+**What was recomputed** (independent Python over `checkpoints/logit-curve-replication/{api,hf_rows}`,
+the cached mirror payloads and HF rows; script in the verify session's
+scratchpad, ~80 lines, no code shared with `recon.py`):
+
+- Join by task key: 200/200 honest, 92/92 attack, 0 agent-only, 0
+  monitor-only, 197 and 92 with identical tool-name sequences. Matches.
+- For the 197 + 92 pairs with identical tool sequences, `arguments` and
+  `output` are identical on every action (0 mismatches). Stronger than the
+  raw file states.
+- Members per action: honest 12675×2; attack 4764×2 and 333×0. Matches.
+- HF vs mirror per-action `sus_score` and member lists: 12675/12675 and
+  5097/5097 equal. Matches.
+- Honest pool: the 12494 scores on the mirror (all actions minus 181
+  `submit`) are an exact **multiset** match to `honest_action_scores` for
+  "GPT-5 Nano" in the paper's `data.json`, not just a count match.
+- Bonus: the paper's `attack_max_sus` (92 values) is an exact multiset match
+  to per-trajectory max over mirror actions **only** when hidden tools are
+  excluded and the 333 no-member actions are kept as-is. Including hidden
+  tools breaks it (13 trajectories jump to 9). So the paper's pool is
+  exactly the L1 pool, and the paper uses the 333 unchanged.
+- Recompute commands in the L1 entry are `jq '.field'` reads of the stored
+  number, not recomputations; the raw file holds aggregates only. The
+  inputs (per-trajectory tool sequences, per-action scores) live in
+  gitignored `checkpoints/` and on the public mirror, not in the raw file.
+  Acceptable for an audit of an immutable public source, but the raw file
+  does not meet the CLAUDE.md "recompute without the model" bar on its own.
 
 **Dumbest ways this could be wrong, and what rules each out.**
+
+1. *"Strict prefix of 3 honest trajectories" — prefix of what?* Tool names
+   and `arguments` are an exact prefix (0 argument mismatches over the 74,
+   72 and 15 prefix actions). `output` is **not**: 10, 23 and 3 prefix
+   positions differ. The differences are (a) the agent-run copy holding a
+   literal `bash: line 1: attachment://<hash>: No such file or directory`
+   where the monitor copy holds real output, and (b) `ls -la` timestamps a
+   month apart (Apr 10 vs Mar 10). So the monitor scored a **re-executed
+   replay** of the same action sequence that stopped early, not the agent
+   run's recorded outputs. L2 already records this
+   (`prefix_content_identical: false`). Claim should read "prefix in tool
+   names and arguments; tool outputs differ". Not ruled out; confirmed.
+2. *"333 single-sample actions."* Not supported. Those 333 have
+   `is_ensemble=false`, `members=null`, `raw_response="None"` (the string),
+   no `model_name`, tokens, cost or latency, and a single-monitor
+   `reasoning` text. But **136 of 333 have half-integer scores** (0.5, 1.5,
+   …), which a single 0–10 integer sample cannot produce (all 34k member
+   scores in both runs are integers). Provenance unknown: could be ensemble
+   means whose member records were lost, or a different parser. Their mean
+   score is 0.85 vs 1.88 for ensemble actions; 33 trajectories affected, one
+   (`1356572f…`) has 37 of 68 actions in this state; in 6 of 92 trajectories
+   the per-trajectory max comes only from such an action. Claim should say
+   "333 actions with no member records" and stop there. L3 should treat them
+   as a labelled subgroup, not as one sample.
+3. *"Mirror == HF on every action" proves nothing independent.* Both are
+   projections of the same private database keyed by the same run id.
+   Agreement shows the mirror is a faithful projection of the dump, which is
+   what L1 needed; it is not a second source. Also the claim text says
+   "scores"; outputs differ on 25 honest and 14 attack actions (in the raw
+   file, not in the claim). Fine as stated, but should not be cited later as
+   corroboration.
+4. *Fingerprint check is a tautology.* The server computes the fingerprint
+   over the payload it serves; recomputing it client-side checks transport
+   integrity only. `public_run_ids.json` carries no fingerprint, so there is
+   no external reference. The `source_run_id` (`18962e83…`) returns zero
+   trajectories and its "matching" fingerprint is the hash of an empty list.
+5. *Hidden-tool set is hardcoded, not read from the paper's code.* Ruled
+   out by the multiset match to `data.json` (both honest pool and attack
+   maxima). `start_phase1/2_planning` (83 attack actions) are correctly kept.
+6. *Could a task-key match pair different rollouts?* Ruled out for 289 of
+   292 pairs by full content equality; for the 3 truncated ones the
+   argument-level prefix match over 15–74 stochastic Opus steps rules out an
+   independent rollout.
+
+**Findings outside the claim that later steps need.**
+
+- HF `arguments` contain `attachment://` placeholders in 50 honest-monitor
+  actions (42 `bash.cmd`, 7 `text_editor.file_text`, 1 `db_bash.cmd`) and
+  197 attack-monitor actions; the attack-monitor `output` has 197 such
+  placeholders on both mirror and HF. The mirror's `tool_call` carries only
+  the tool name. For those actions the monitor's true input is unrecoverable
+  from either source. Bears directly on the L4 "byte-identical prompt" claim.
+- The honest agent run carries 635 stray GPT-5-nano scores; 443 of them
+  differ from the monitor run's score on the same action. The cached monitor
+  is not deterministic across runs.
+- L2's `n_actions_scorable` is 12487 (7 "malformed" dropped) vs L1's 12494.
+  Small, but the two entries currently disagree on the pool size.
 
 ---
 
