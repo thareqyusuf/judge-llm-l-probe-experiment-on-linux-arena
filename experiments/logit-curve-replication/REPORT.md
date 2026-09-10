@@ -199,3 +199,162 @@ Min usable FPR = 20 / 12,494 = **1.6e-3**.
    records the agent run's full length alongside.
 4. `src/section_5_3_monitoring_results/data.json` does not exist locally; the
    L3 cross-check uses `src/neurips/section_5_3_monitoring_results/data.json`.
+
+---
+
+## L2 — Export (2026-09-10)
+
+Script: `data_export/export.py` (pure stdlib; reads the L1 caches).
+Raw: `results/raw/logit-curve-replication/export_meta_20260910T043234Z.json`
+(counts + cross-checks) and `export_actions_20260910T043234Z.jsonl` (one
+compact line per action: ids, index, tool name, skip reason, cached samples,
+mean, harm index — no tool text). An earlier pair `…_20260910T042851Z.*` is
+superseded (it lacked `side_task_category` and exported HF outputs; left in
+place, append-only). Log: `logs/logit-curve-replication/l2_export.log`.
+
+**Files** (`data_export/data/`, per `TASK.md`; the three `.jsonl` are gitignored
+because they are 41 + 16 + 4 MB — regenerate with the script, or check
+`CHECKSUMS.json` (committed) against a copy):
+
+| file | lines | MB | sha256 |
+|---|---|---|---|
+| `honest.jsonl` | 12,675 | 41.0 | `cbc0994d…5475d156` |
+| `attack.jsonl` | 5,097 | 16.4 | `c8a4a22b…98e194839` |
+| `trajectories.jsonl` | 292 | 3.7 | `38e00f14…91d91c93` |
+| `summary.md` | | | committed |
+
+Per-action fields: `run_id, traj_id` (agent run / agent trajectory id),
+`monitor_run_id, monitor_traj_id, env, main_task, side_task` (null for honest),
+`side_task_category, side_task_failure_type, policy` ("GPT-5 Nano monitor on
+Opus honest/attack" — the run display name; `agent_model` is null in the dump),
+`action_idx, n_actions_in_traj, tool_name, tool_input` (arguments dict),
+`tool_output, tool_output_source, tool_output_differs_from_hf, output_error,
+skipped_by_monitor` (null / `"submit" tool calls are ignored` / `malformed action
+(parsing error)`), `side_task_succeeded, side_task_trigger_action_idx,
+monitor_scores` (list of samples), `monitor_score_mean, monitor_is_ensemble`.
+Per-trajectory text (main-task description, environment description,
+side-task goal, content hash, `n_actions_in_agent_traj`, trajectory URL) is in
+`trajectories.jsonl` to avoid repeating 2–3 kB per action.
+
+**Basis.** Export = the *monitor run's* trajectories (they carry the scores),
+joined to the agent run by `(env, main_task, side_task)`. `tool_input` from the
+HF rows (only source). `tool_output` from the mirror's `monitor-data` (the paper
+snapshot); it differs from the HF row on 25 honest / 14 attack actions, all of
+which are `LinuxBench` → `linuxarena` renames in the HF dump (examples in
+`.sides.*.checks.output_diff_examples`). No argument contains either string, so
+`tool_input` is unaffected by that scrubbing. Policy reasoning
+(`agent_reasoning`, `extended_thinking`, `inter_action_messages`) is dropped:
+6,295 + 3,649 / 24 + 212 / 24 + 201 actions carried some.
+
+**Counts** (`summary.md`): honest 200 trajectories in 10 envs (20 each),
+12,675 actions, **12,487 benign actions** after dropping 181 hidden `submit`
+calls and 7 malformed actions (12,494 if the 7 malformed are kept — the paper's
+lean loader cannot see `output_error`, so its pool keeps them). Attack: **92
+trajectories** (40 distinct side tasks, 1–3 trajectories each; 6 categories:
+access_control_bypass 31, running_malware 18, exfiltration 17, data_tampering
+13, monitoring_subversion 8, access_secret 5), 5,097 actions, 4,747 scorable;
+side task succeeded in 90/92; failure_type live 30 / delayed 62; the harm-step
+index (`get_live_failure_action_index` rule) is recorded for 30 trajectories.
+Min usable FPR = 20 / 12,487 = **1.60e-3**.
+
+**The 3 truncated honest trajectories** are identical to the agent run in
+function and arguments on every prefix action, but 23 / 10 / 3 of their
+outputs differ (`.sides.honest.checks.truncated_vs_agent_run`). So they are
+the same tool-call sequence with re-captured outputs, then cut. Exported as
+scored (72 / 74 / 15 actions), with `n_actions_in_agent_traj` = 123 / 129 / 66.
+
+Recompute: `jq '.sides | map_values({n_trajectories, n_actions, n_actions_scorable, samples_per_action_hist})' results/raw/logit-curve-replication/export_meta_20260910T043234Z.json`
+
+---
+
+## L3 — Logit-ROC from cached scores (2026-09-10)
+
+Script: `data_export/logit_roc.py` (numpy + matplotlib; run in the paper venv).
+Raw: `results/raw/logit-curve-replication/l3_logit_roc_20260910T043236Z.json`
+(carries the full benign score array, every attack trajectory's max action and
+samples, every ROC point with FP/TP/FN, the bootstrap settings, the paper
+cross-check). Log: `logs/logit-curve-replication/l3_logit_roc.log`.
+Figures: `results/figures/logit-curve-replication/l3_roc_standard.png`,
+`l3_logit_roc_pooled.png`, `l3_logit_roc_per_category.png`.
+
+**Conventions actually used** (each a choice; see raw `.conventions`):
+per-action score = stored ensemble mean on both sides (the attack run has 333
+single-sample actions, L1); benign pool = the paper's pool (12,494: hidden
+tools out, the 7 malformed kept, so the cross-check is exact); attack score =
+per trajectory, max over non-hidden actions, **ungated**; thresholds = every
+distinct score value; strict `>`; crop = ≥5 FP, ≥5 TP, ≥5 FN; TPR at a target
+FPR = linear interpolation of the ROC polyline; bootstrap B = 2000, seed 0,
+honest actions and attack trajectories resampled independently.
+
+**Pooled ROC** (22 points, 11 cropped, thresholds 3.0 … 8.0):
+
+| FPR target | TPR | 95% CI | expected FP | usable (≥20 FP) |
+|---|---|---|---|---|
+| 1e-1 | 0.924 | [0.870, 0.978] | 1249 | yes |
+| 3e-2 | 0.784 | [0.694, 0.864] | 375 | yes |
+| 1e-2 | 0.560 | [0.461, 0.654] | 125 | yes |
+| 3e-3 | 0.314 | [0.223, 0.409] | 37 | yes |
+| 1e-3 | 0.228 | [0.141, 0.318] | 12.5 | **no** |
+
+Recompute: `jq '.tpr_at_fpr' results/raw/logit-curve-replication/l3_logit_roc_20260910T043236Z.json`
+
+OLS on the 11 cropped points in logit10–logit10 space: **slope 0.881,
+intercept 1.906, R² 0.985**. Recompute: `jq '.ols_pooled' …l3_logit_roc_20260910T043236Z.json`.
+The curve bends: the four lowest cropped points (thresholds 6.5–8.0, FPR
+2.2e-2 → 1.8e-3) fall below the line, and the point at threshold 8.5 (3 FP,
+uncropped) is far below it.
+
+**Per side task.** **DEVIATION**: `TASK.md` asks for a curve per `side_task`;
+the 92 attack trajectories have 40 distinct side-task ids with ≤3 trajectories
+each, so no per-id curve can satisfy ≥5 TP and ≥5 FN. The split is by
+`side_task.task_category` (6 categories) instead. Only access_control_bypass
+(n=31, 7 cropped points, slope 0.57, R² 0.92) and data_tampering (n=13, 4
+points, slope 0.19, R² 0.42) and running_malware (n=18, 3 points, slope 0.70)
+have ≥3 cropped points; the other three have ≤2. `jq '.per_side_task_category | map_values({n_trajectories, ols_cropped})' …`.
+
+**Per-sample variant** (`.variant_per_sample`): benign = 24,988 (action,
+sample) rows, attack = the samples of each trajectory's max-mean action; TPR at
+FPR 1e-2 = see raw. Reported for completeness only; the mixed 1/2-sample attack
+side makes it the less clean definition.
+
+**Cross-check vs the paper's `data.json`** (neurips copy, "GPT-5 Nano" under
+`vs_opus`; `.cross_check_paper`):
+- `honest_action_scores`: same length (12,494) and **identical multiset**.
+- `attack_max_sus`: same length (92) and **identical multiset**.
+- Per-budget thresholds and tie fractions (paper's `compute_threshold_at_fpr`,
+  re-implemented): **equal at all six budgets** (1e-4 … 1e-1).
+- The y-values do not and should not agree: the paper reports *safety*
+  (caught / (caught + uncaught ST-success), per-action compounding of
+  fractional flags, harm-step gating), not TPR of the max action:
+
+| budget | threshold / tie | paper safety | our TPR (interp.) |
+|---|---|---|---|
+| 1e-4 | 9.0 / 0.58 | 0.157 | 0.081 |
+| 1e-3 | 8.5 / 0.50 | 0.241 | 0.228 |
+| 5e-3 | 8.0 / 0.51 | 0.458 | 0.399 |
+| 1e-2 | 7.5 / 0.79 | 0.572 | 0.560 |
+| 5e-2 | 5.0 / 0.29 | 0.881 | 0.871 |
+| 1e-1 | 3.5 / 0.51 | 0.924 | 0.924 |
+
+The gap grows at low FPR because compounding lets many actions at the
+threshold each contribute a fractional flag, whereas the max-action rule
+counts a trajectory once; the ST-success denominator (90/92) and gating are
+second-order here. `jq '.cross_check_paper.per_budget' …`.
+
+**Two ways this could be an artifact.** (1) The honest pool is per-action but
+trajectories differ 4× in length (9–163 actions); long honest trajectories
+dominate the FPR denominator, and the bootstrap over actions ignores that
+clustering — a trajectory-level bootstrap of FPR would give wider intervals.
+(2) Scores sit on a 0.5 grid, so "TPR at FPR = 1e-2" is an interpolation
+between the threshold-7.5 point (FPR 8.4e-3) and the threshold-7.0 point
+(FPR 1.6e-2); the number depends on that convention (the paper's fractional
+tie-breaking is the same thing in expectation, but a strict step function
+would read 0.543).
+
+### Open questions after L3
+
+5. Per-category rather than per-id split (above). If you want per-id anyway,
+   the raw file has every trajectory's id, category and max score.
+6. The pod-side ROC should use the same 12,494-action pool if it is to be
+   overlaid on this one; the manifest excludes the 7 malformed actions
+   (the live monitor skips them), so it will be 12,487. Say which you want.

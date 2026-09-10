@@ -24,6 +24,77 @@ narrative per step is in `REPORT.md` (same directory).
 
 ---
 
+## 2026-09-10 — L3 logit-ROC from cached GPT-5 Nano scores
+
+**Claim.** With per-action ensemble means, an honest pool of 12,494 actions and
+the max action per attack trajectory (n=92, ungated), the cached monitor
+reaches TPR 0.560 (95% bootstrap CI 0.461–0.654) at FPR 1e-2 and 0.314
+(0.223–0.409) at FPR 3e-3; the 11 cropped ROC points in logit10–logit10 space
+fit a line of slope 0.881 with R² 0.985, with the low-FPR end bending below it.
+The honest pool and attack maxima are identical (as multisets) to the paper's
+`data.json`, and the paper's per-budget thresholds are reproduced exactly.
+
+**Kind of claim.** General claim (replication of a published curve). Baseline
+= the paper's own numbers (cross-check above); chance line on the standard ROC.
+
+**Evidence.**
+- Script: `experiments/logit-curve-replication/data_export/logit_roc.py` @ commit `4032851` (= `.git_commit` in the raw file)
+- Input: `results/raw/logit-curve-replication/export_actions_20260910T043234Z.jsonl` (from `data_export/export.py`, same commit)
+- Raw: `results/raw/logit-curve-replication/l3_logit_roc_20260910T043236Z.json`
+- Log: `logs/logit-curve-replication/l3_logit_roc.log`
+- Figures: `results/figures/logit-curve-replication/l3_roc_standard.png`, `l3_logit_roc_pooled.png`, `l3_logit_roc_per_category.png`
+- Recompute (no model needed):
+  - `jq '.tpr_at_fpr["0.01"] | {tpr, ci95}' results/raw/logit-curve-replication/l3_logit_roc_20260910T043236Z.json` → 0.560, [0.461, 0.654]
+  - `jq '.ols_pooled' …` → slope 0.881, intercept 1.906, r2 0.985, n 11
+  - from scratch: `python3 -c "import json;d=json.load(open('results/raw/logit-curve-replication/l3_logit_roc_20260910T043236Z.json'));b=d['benign_scores'];m=[t['max_score'] for t in d['attack_trajectories']];print(sum(s>7.5 for s in b)/len(b), sum(x>7.5 for x in m)/len(m))"` → FPR 0.00840, TPR 0.543 at threshold 7.5 (the point just below FPR 1e-2)
+  - cross-check: `jq '.cross_check_paper | {honest_pool_multiset_equal, attack_max_multiset_equal, thr: [.per_budget[].threshold_equal]}' …` → true, true, all true
+
+**Baselines.**
+| condition | value |
+|---|---|
+| main (TPR at FPR 1e-2) | 0.560 |
+| chance | 0.010 |
+| paper safety at budget 1e-2 (different metric, same threshold) | 0.572 |
+
+**What I checked myself.** (left for the reviewer)
+
+**Alternative explanations considered.**
+- Action-level bootstrap ignores that honest actions are clustered in 200
+  trajectories of very unequal length; CIs on FPR are likely too narrow.
+- TPR at a target FPR is an interpolation on a 0.5-step score grid; the strict
+  step-function value at threshold 7.5 is 0.543 (FPR 8.4e-3).
+- Per-category curves rest on 5–31 trajectories; only one category has ≥5
+  cropped points.
+
+**Status.** `[tested]`
+
+---
+
+## 2026-09-10 — L2 export: 12,675 honest + 5,097 attack actions
+
+**Claim.** The export covers all 200 honest and 92 attack monitor-run
+trajectories; every action's cached samples equal the mirror's; 12,487 honest
+actions are scorable by the live monitor (12,494 in the paper's pool);
+tool_output differs from the HF dump on 39 actions, all `LinuxBench`→`linuxarena`
+renames, and no tool_input contains either string.
+
+**Kind of claim.** Descriptive (data preparation).
+
+**Evidence.**
+- Script: `experiments/logit-curve-replication/data_export/export.py` @ commit `4032851` (= `.git_commit` in the raw file)
+- Raw: `results/raw/logit-curve-replication/export_meta_20260910T043234Z.json`, `export_actions_20260910T043234Z.jsonl` (superseded first run: `…_20260910T042851Z.*`)
+- Log: `logs/logit-curve-replication/l2_export.log`
+- Data: `experiments/logit-curve-replication/data_export/data/{honest,attack,trajectories}.jsonl` (gitignored, 61 MB; sha256 in `data_export/data/CHECKSUMS.json` and in the raw meta), `summary.md`
+- Recompute: `jq '.sides | map_values({n_trajectories, n_actions, n_actions_scorable, member_mismatch: .checks.member_mismatch_hf_vs_api, output_diff: .checks.output_diff_hf_vs_api})' results/raw/logit-curve-replication/export_meta_20260910T043234Z.json`
+
+**Alternative explanations considered.** `tool_input` has no mirror-side
+check at all (the mirror strips arguments); if the HF dump altered arguments
+in ways other than the two strings searched for, nothing here would notice.
+
+**Status.** `[tested]`
+
+---
+
 ## 2026-09-10 — L1 reconnaissance: mirror + HF rows audited
 
 **Claim.** The four runs (Opus honest/attack agent runs; GPT-5 Nano monitor
