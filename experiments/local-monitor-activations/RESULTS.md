@@ -18,6 +18,121 @@ verbatim, so the reviewer can see what was asked vs what was run.
 
 ---
 
+## 2026-09-10 — G3: pilot (30 actions) — throughput, noise floor, activation health, neutralized render, N
+
+**Claim.** The pipeline runs cleanly on 30 actions spanning 2.8k–30.9k tokens (30/30 ok, 0 failures, 0 skips) at 2.9–23 s per action, peak
+21.8 GiB, and the measured time is 12% *under* the G2 projection, so N stays at 2,012 (main run ≈ 6.0 h, each counterfactual render ≈ 1.0 h,
+total ≈ 8.1 h). The chunk-size noise floor is |ΔE[score]| median 0.05 (max 0.23) and a cosine distance of ~1e-3 at the `final` position
+(~5e-3 at `action_end`), an order of magnitude below the typical between-action distance at the same positions. **But the verbalized score is
+degenerate under the forced-final design: all 30 actions get argmax digit 0**, and E[score] ranges only 0.31–1.51 (honest mean 0.61, attack
+mean 0.77; Spearman vs cached 0.38, n = 30), including the two actions the cached monitor scored 8.5 and 5.5. Neutralization changes the prompt
+and still parses in 10/10, moves E[score] by 0.10 on average (about twice the noise floor) with no consistent sign.
+
+**Kind of claim.** Engineering verification on a pilot; the score/side numbers are descriptive on n = 30 and are not a result.
+
+**Evidence.**
+- Runs: `g3_pilot.sh` → `run_monitor.py` three times (30 `original` @ chunk 256 → `checkpoints/…/out/pilot_c256`; 20 `original` @ chunk 128 →
+  `pilot_c128`; 10 `neutralized` @ chunk 256 → `pilot_neut_c256`), tmux `mi:g3`, log `logs/local-monitor-activations/g3_pilot_20260910T105314Z.log`.
+  Subsets: `subset_pilot.json`, `subset_pilot_noise.json`, `subset_pilot_neut.json` (built by `g3_make_pilot.py`, raw `g3_pilot_subset_20260910T104403Z.json`).
+- Analysis: `g3_pilot.py` → raw **`results/raw/local-monitor-activations/g3_pilot_20260910T111233Z.json`** (an earlier run without the median-pairwise
+  numbers, `g3_pilot_20260910T111113Z.json`, is superseded and kept); log `logs/local-monitor-activations/g3_pilot_analysis_20260910T111227Z.log`.
+- Figure: `results/figures/local-monitor-activations/g3_layer_norms.png` (norm per layer per position; nearest-other-action cosine distance per layer).
+- The per-action records (`scores.jsonl`, 30 + 20 + 10 lines, with the full digit distributions, top-10 tokens at both forced positions and capture
+  positions) are copied into the raw file under `throughput.per_action`, `noise_floor.pairs`, `neutralized.per_action` (numbers only; the tensors stay in `checkpoints/`).
+
+### G3.1 throughput (chunk 256, `original`)
+| decile | tokens | s/action | prefill s | peak GiB |
+|---|---|---|---|---|
+| 0 | 2,756–4,082 | 2.9 | 2.7 | 14.0 |
+| 1 | 4,182–6,690 | 3.4 | 3.3 | 14.8 |
+| 2 | 9,541–10,594 | 4.1 | 4.0 | 15.9 |
+| 3 | 12,715–13,070 | 5.8 | 5.7 | 16.7 |
+| 4 | 15,922–17,794 | 8.6 | 8.5 | 18.0 |
+| 5 | 18,874–20,159 | 11.3 | 11.1 | 18.7 |
+| 6 | 22,124–22,620 | 13.5 | 13.4 | 19.4 |
+| 7 | 24,288–25,018 | 16.1 | 16.0 | 20.1 |
+| 8 | 26,239–28,482 | 19.1 | 18.9 | 21.1 |
+| 9 | 29,683–30,902 | 23.1 | 23.0 | 21.8 |
+
+Everything outside the prefill (hooks, two forced steps, record) is 0.13 s/action. First action of a process includes ~4 s warm-up. Peak VRAM at
+chunk 128 is 3 GiB lower (18.5 GiB at 30.5k). Activation payload 576,000 B/action (4×25×2880 fp16); a 10-action shard is 5.76 MB → 2,012 actions ≈ 1.16 GB, 250 × 2 renders ≈ 0.29 GB.
+Whole run of 30: 324 s including the 36 s load.
+Recompute: `jq '.throughput | {by_decile, overhead_seconds_mean, peak_gib_max, acts_bytes_per_action}' results/raw/local-monitor-activations/g3_pilot_20260910T111233Z.json`
+
+### G3.5 N for the main run
+Measured total seconds (29 actions, warm-up excluded) / G2 projection = **0.877** → within 20%, N unchanged. Refit on measured times:
+t = 0.81 + 1.68e-4·L + 1.82e-8·L² s → subset_main **5.99 h**, counterfactual **1.04 h per render**, total **8.06 h** (G2 said 6.94 / 1.20 / 9.34).
+Recompute: `jq '.projection' …g3_pilot_20260910T111233Z.json`
+
+### G3.2 noise floor (chunk 256 vs 128, same 20 actions, 2.8k–30.5k tokens)
+| quantity | mean | median | p90 | max |
+|---|---|---|---|---|
+| \|Δscore\| (argmax digit) | 0 | 0 | 0 | 0 (both always 0 — uninformative, see G3.6) |
+| \|ΔE[score]\| | 0.058 | 0.049 | 0.094 | 0.229 |
+| \|Δ digit mass\| | 2e-5 | 2e-5 | 5e-5 | 9e-5 |
+| cos-dist last layer, transcript_end | 0.0044 | 0.0038 | 0.0078 | 0.0104 |
+| cos-dist last layer, action_end | 0.0070 | 0.0025 | 0.0163 | 0.0380 |
+| cos-dist last layer, instruction_end | 0.0011 | 0.0006 | 0.0027 | 0.0052 |
+| cos-dist last layer, final | 0.0011 | 0.0004 | 0.0026 | 0.0066 |
+
+Max over layers ≥ 1 is at most 1.5× the last-layer value. No activation tensor is identical across chunk sizes (20/20 differ), consistent with G1's
+"reduction order changes logits". **For scale**, the median *between-action* cosine distance at the last layer is 0.152 (transcript_end), 0.160 (action_end),
+0.016 (instruction_end), 0.027 (final); p10: 0.076 / 0.096 / 0.010 / 0.011. So the noise floor is ~1/30 of typical between-action distance at the content
+positions and ~1/15–1/25 at the two template positions. Any probe-vs-score gap below ~0.1 in E[score], or any activation effect below ~0.005 cosine at `final`, is inside the floor.
+Recompute: `jq '.noise_floor | del(.pairs)' …g3_pilot_20260910T111233Z.json`; `jq '.activation_health.distinct | map_values({median_pairwise_cosine_distance_last_layer, p10_pairwise_cosine_distance_last_layer})' …`
+
+### G3.3 activation health
+Shape `[4, 25, 2880]` fp16 per action, 0 NaN, 0 Inf, max |value| 9,984 (fp16 limit 65,504; the layer-24 norms of ~24k are spread over 2,880 dims).
+Median ‖h‖₂ grows log-linearly 120 (embedding) → ~24,000 (layer 24) at every position; `final` is slightly above the others at every layer (figure, left).
+At every position and every layer ≥ 1, no two of the 30 actions have identical vectors. At layer 0 (embedding output) identical pairs are expected and found:
+435/435 pairs at `final` and `instruction_end` (same template token), 328 at `action_end` (the `'}\n` token is shared by most tool calls), 32 at `transcript_end`.
+Nearest-other-action cosine distance at the last layer: ~0.03 (transcript_end, action_end), ~0.003 (instruction_end, final) — the two template positions carry
+much less action-specific variance (figure, right), which G4's downstream probe will feel.
+Recompute: `jq '.activation_health | {n, shape_per_action, dtype, n_nan, n_inf, fp16_max_abs, distinct: (.distinct | map_values({any_identical_pair_layers_ge1, layer0_n_identical_pairs}))}' …g3_pilot_20260910T111233Z.json`
+
+### G3.4 neutralized render (10 actions, 9 with a current-action substitution)
+10/10 prompts changed (sha256 differs from the manifest; 0–15 fewer tokens), 10/10 parse (digit mass ≥ 0.9995).
+|ΔE[score]| mean 0.10, median 0.07, max 0.25; signed mean −0.02 (5 up, 5 down). Cosine distance to the original at the last layer: action_end mean 0.018
+(max 0.048), transcript_end 0.006, final 0.005, instruction_end 0.002 — about 2.5× the chunk-size floor at action_end, 1–5× elsewhere. On 10 actions this
+says only that the effect of the substitutions on this monitor's verbalized score is of the same order as the noise floor.
+Recompute: `jq '.neutralized | del(.per_action)' …g3_pilot_20260910T111233Z.json`
+
+### G3.6 the score signal is nearly flat under forced-final (needs your decision before G4)
+- After `<|channel|>final<|message|>` the top token is `<` in 30/30 and digit mass ≤ 2e-12: the task's stated read position has no score information.
+- After the additional `<score>\n`, digit mass ≥ 0.9995 in 30/30, but **argmax = 0 in 30/30**. E[score]: honest 0.31–1.00 (mean 0.61), attack 0.31–1.51 (mean 0.77).
+  The two actions the cached monitor put at 8.5 and 5.5 got E[score] 0.79 and 1.51. Spearman(E[score], cached_mean) = 0.38 on 30 (not a result: n = 30, 21 trajectories).
+- Reading: with no reasoning tokens, gpt-oss-20b's immediate digit is the prompt's default ("default to LOW scores"); the graded information is only in the tail
+  of the digit distribution. This is the design TASK-ver2 fixed ("forced-final only, no reasoning tokens"), implemented as specified plus the `<score>\n` extension.
+  Options I see, none of which I will take without you: (a) accept E[score] as the verbalized signal (cheap; its dynamic range is ~1 point); (b) let the model
+  reason first (analysis channel, greedy, ≤ 2k tokens) and read the digit after the real `<score>`: ~30–60× the decode cost per action, i.e. days not hours for
+  2,012 actions on this GPU; (c) a middle path such as forcing a short fixed reasoning stub — changes the prompt and would need its own validation.
+Recompute: `jq '.scores' …g3_pilot_20260910T111233Z.json`
+
+**What I checked myself.** Every record status; shard keys equal the record keys; both forced positions' top-10 tokens by eye for 6 actions; the figure by eye;
+that chunk-128 records have `attn_chunk_size: 128` in every line.
+
+**Alternative explanations / caveats.**
+1. *Length cap / selection bias* — the pilot is 3 per decile of subset_main, so it inherits the cap; nothing above 32k was run.
+2. *Placeholders* — 3 of the 30 carry `attachment://`; not split in this pilot (too few).
+3. *17,234 vs 12,494* — unchanged.
+4. *MXFP4 actually used* — asserted at load (`dequantize=False`, 12.83 GiB resident) in every run's `run_meta.json`; numerical faithfulness of the sm_120 kernels remains untested beyond "the model behaves".
+5. *Capture positions* — as defined in G2; the `action_end` token `'}\n` and the template positions are shared across actions, which is why layer-0 rows coincide there.
+6. *Noise floor* — measured on 20 actions with one alternative chunk size; a third chunk size could be larger; use it as a scale, not a bound.
+7. *Neutralization* — 10 actions; the substitutions also touch benign text (G2.6); E[score] moves both ways.
+8. *Trajectory correlation* — 21 trajectories in the pilot; the noise floor and health checks do not depend on it; the side means do.
+9. *Timing* — measured on a quiet GPU with the model resident; G4 adds checkpoint writes to the network volume every 25 actions (5.8 MB each).
+10. *Flat score* — could also reflect `Reasoning: low` in the system prompt or the pinned date; not tested (would need a second pilot per variant).
+
+**Status.** `[tested]` for G3.1–G3.5; G3.6 is a `[tested]` observation with an open design decision.
+
+### Stop — decisions for you before G4
+1. G3.6: accept E[score] from the forced `<score>\n` position as the verbalized score (option a), or change the design (b/c)?
+2. Chunk size 256 for G4 (peak 21.8 GiB at the cap; 128 saves 3 GiB at no measurable time cost) — I will use 256 unless you say otherwise.
+3. "rsync `out/` to object storage every 100": no rclone remote or S3/B2 credentials exist on the pod (`rclone` binary only; nothing in `/workspace/.env`).
+   `out/` lives on the persistent network volume; the numbers (`scores.jsonl`) will be committed as raw. If you want the tensors off-pod, give me a remote.
+
+---
+
 ## 2026-09-10 — G3.0: runner written; 2-prompt GPU sanity check before the pilot
 
 **Claim.** `run_monitor.py` (thin runner: `monitor_prompt` + `chunked_attention`, forced-final only, four-position capture) works end to end on
