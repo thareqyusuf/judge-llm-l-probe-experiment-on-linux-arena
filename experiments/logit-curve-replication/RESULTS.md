@@ -24,6 +24,38 @@ narrative per step is in `REPORT.md` (same directory).
 
 ---
 
+## 2026-09-10 — L4 handoff package: prompt formatter byte-identical on all 17,234 actions
+
+**Claim.** `gpu/format_monitor_prompt.py` (pure Python) reproduces
+control-tower 1.0.1's live-monitor prompt byte for byte on every scorable
+action of the export (17,234/17,234); `gpu/manifest.json` lists those actions
+with cached scores and control-tower prompt hashes plus a 200-action pilot;
+`gpu/run_monitor.py` runs end to end on CPU with Qwen3-0.6B (2 actions),
+capturing fp16 `[n_layers, d_model]` last-prompt-token residuals, a parsed
+score, an expected score over digit tokens, and resuming from its checkpoint.
+Token-length statistics: see the L4.3 entry in `REPORT.md`.
+
+**Kind of claim.** Engineering verification (no hypothesis).
+
+**Evidence.**
+- Scripts: `experiments/logit-curve-replication/gpu/format_monitor_prompt.py`, `data_export/verify_prompt_format.py` @ commit `4032851` (= `.git_commit` in the verify raw), `data_export/build_manifest.py`, `data_export/token_lengths.py`, `gpu/run_monitor.py`
+- Raw: `results/raw/logit-curve-replication/l4_prompt_verify_20260910T043718Z.json`; `l4_token_lengths_<ts>.json` (see REPORT L4.3)
+- Logs: `logs/logit-curve-replication/l4_prompt_verify.log`, `l4_build_manifest.log`, `l4_token_lengths.log`, `l4_smoke_qwen3-0.6b.log`
+- Figure: `results/figures/logit-curve-replication/l4_token_lengths.png`
+- Recompute: `jq '{n_actions_compared, n_equal, n_mismatch}' results/raw/logit-curve-replication/l4_prompt_verify_20260910T043718Z.json` → 17234, 17234, 0; `jq '{n_actions, pilot_size}' experiments/logit-curve-replication/gpu/manifest.json` → 17234, 200
+
+**Alternative explanations considered.**
+- "Byte-identical to control-tower" is not "byte-identical to what GPT-5
+  Nano saw": stored prompts are empty in the dump, task descriptions and
+  side-task goals come from the dump / v1.0.1 registry, and the dump was
+  edited after the fact (39 renamed outputs). Nothing here can close that gap.
+- The smoke test used the two shortest pilot prompts on CPU; nothing about
+  CUDA, gpt-oss's channel format, or 100k-token prompts is exercised.
+
+**Status.** `[tested]`
+
+---
+
 ## 2026-09-10 — L3 logit-ROC from cached GPT-5 Nano scores
 
 **Claim.** With per-action ensemble means, an honest pool of 12,494 actions and

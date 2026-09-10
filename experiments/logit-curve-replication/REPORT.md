@@ -358,3 +358,132 @@ would read 0.543).
 6. The pod-side ROC should use the same 12,494-action pool if it is to be
    overlaid on this one; the manifest excludes the 7 malformed actions
    (the live monitor skips them), so it will be 12,487. Say which you want.
+
+---
+
+## L4 — Handoff package for the pod (2026-09-10)
+
+Everything is under `experiments/logit-curve-replication/gpu/` on this branch
+(pushed). **DEVIATION (L4.5)**: I did not create a separate "scripts repo";
+the pod can `git clone --depth 1 --branch exp/logit-curve-replication <this repo>`
+and use `experiments/logit-curve-replication/gpu/` directly (no data is in
+git — see "What the pod still needs" below). Say if you want a separate repo.
+
+### L4.1 `gpu/format_monitor_prompt.py` — pure Python, no control-tower imports
+
+Ports `build_action_prompt` + `format_history` + `format_action` +
+`format_str_replace_action_output` (the `unidiff` dependency re-implemented) +
+the single-user-message convention. Inputs: the L2 export
+(`load_export(data_dir)` builds the trajectory dicts), the byte copy of the
+template at `gpu/prompts/old_action.md` (sha256 `a4a48d03…` = the paper's
+file), and `gpu/side_task_goals.json` (rendered by control-tower's own
+`get_side_task_goals` per env from the v1.0.1 registry, via
+`data_export/dump_side_task_goals.py`; every attack trajectory's side task is
+in its env's list).
+
+**Verification** (`data_export/verify_prompt_format.py`, run in the paper
+venv): for every one of the **17,234** scorable actions (12,487 honest +
+4,747 attack, i.e. all of them, not 50) the port's output is **byte-identical**
+to control-tower 1.0.1's `build_action_prompt` on the same inputs, including
+the 8 actions that go through the str_replace diff-reconstruction path.
+Raw: `results/raw/logit-curve-replication/l4_prompt_verify_20260910T043718Z.json`
+(`n_equal == n_actions_compared == 17234`), which also stores each prompt's
+sha256 + length; the manifest carries them so the pod can check its own
+rendering without control-tower (`run_monitor.py` records
+`prompt_sha256_matches_manifest` per action).
+Recompute: `jq '{n_actions_compared, n_equal, n_mismatch, n_str_replace_diff_reconstruction_path_hit}' results/raw/logit-curve-replication/l4_prompt_verify_20260910T043718Z.json`.
+
+What this does **not** verify: that control-tower's rendering of these fields
+equals what GPT-5 Nano actually received in 2026 — the stored
+`monitor_prompt` is empty in the dump (L1), `main_task.description` and the
+side-task goal texts are taken from the HF dump / v1.0.1 registry and the
+mirror does not carry them, and the monitor run's own control-tower version
+is not recorded. The 39 `LinuxBench`→`linuxarena` output renames show the
+dump was edited after the fact; the export uses the mirror text for outputs
+and nothing can check the arguments.
+
+Prompt sizes (characters, control-tower rendering): min 5,411, median
+99,562, p95 281,679, max 499,030.
+
+### L4.2 `gpu/manifest.json` (5.7 MB, committed)
+
+Built by `data_export/build_manifest.py` (log `logs/…/l4_build_manifest.log`):
+run ids + mirror fingerprints for both pairs (L1), sha256 + size + line count of
+the three data files (L2), the prompt-template sha256, per trajectory
+(292) the content hash / lengths / harm index, and per scorable action
+(**17,234** = 12,487 honest + 4,747 attack — hidden tools and malformed
+actions excluded, since the live monitor skips them) the cached samples,
+mean, position bucket, prompt sha256 and length, and `pilot: true/false`.
+Pilot = 200 (100 honest / 100 attack): 10 per env per side, cycling
+early / middle / late positions (40 / 30 / 30 per side), 187 distinct
+trajectories, seed 0.
+Recompute: `jq '{n_actions, n_actions_by_side, pilot_size, pilot_by_side_env, pilot_by_side_position}' experiments/logit-curve-replication/gpu/manifest.json`.
+
+### L4.3 Token lengths (tokenizers only)
+
+TOKEN_STATS_PENDING
+
+### L4.4 `gpu/run_monitor.py`
+
+Flags: `--model --manifest --data --subset {pilot,all} --side --out
+--max-new-tokens (2048) --max-retries (3, control-tower's follow-up message on
+format errors) --n-samples (0) --checkpoint-every (500) --limit
+--shortest-first --device --dtype --attn --thinking {on,off} --check-mirror`.
+Per action: data-file sha256 vs manifest (once), render prompt → sha256 vs
+manifest, chat template (`add_generation_prompt=True`; Qwen3 `enable_thinking`
+per `--thinking`), **forward hooks on every decoder layer** capturing
+`output[:, -1, :]` of the prefill pass only (armed before `generate`, ignores
+decode steps) → fp16 `[n_layers, d_model]` keyed `traj_id|action_idx`;
+greedy generation; the visible answer is the `final` channel for gpt-oss
+(after `<|channel|>final<|message|>`) or the text after `</think>` for Qwen3;
+`<score>` parsed with a port of `extract_xml_tag` + `default_validate_response`;
+`expected_score` = Σ d·P(d) over the single-token spellings of 0–9 (and "10"
+if single-token) at the score's first generated token, renormalised, with
+`score_token_mass` and the top-10 tokens at that position stored; if the
+number spans >1 token the field is null with a note; `--n-samples K` stores K
+extra T=1 samples. Output: `scores.jsonl` (append), `acts_<k>.pt` shards +
+`acts_index.json` every 500 actions; resume skips keys in the index;
+`run_meta.json` records model, dtype, attention implementation, versions,
+git commit, activation spec.
+
+**CPU smoke test** (`Qwen/Qwen3-0.6B`, bf16, `--thinking off`,
+`--max-new-tokens 400 --n-samples 2 --limit 2 --shortest-first`; log
+`logs/logit-curve-replication/l4_smoke_qwen3-0.6b.log`; outputs in
+`checkpoints/logit-curve-replication/smoke_qwen06b/`, gitignored):
+2 actions (one honest, one attack; 1,683 / 1,774 prompt tokens) in 295 s;
+both produced `<reasoning>…</reasoning><score>5</score>`; `expected_score`
+4.70 and 5.35 with 99.96 % / 99.999 % of the mass on digit tokens (Qwen3
+tokenises 0–9 as single tokens; "10" is two tokens, so `P(10)` is folded
+into `P(1)` — noted in the record); sampled scores `[6, 6]` and `[null, 3]`
+(one sample dropped the tag); activations `[28, 1024]` fp16 (norm 6.5 at
+layer 0 → 341 at layer 27); prompt sha256 matched the manifest for both; a
+second invocation reported `0 actions to do (2 already …)`. The 0.6B model's
+scores (5 for actions cached at 1 and 0) are not meaningful — this only
+exercises the pipeline.
+
+Not tested here: CUDA path, `device_map="auto"`, gpt-oss-20b's chat template
+and `final`-channel parsing (only the tokenizer was loaded on the laptop),
+`--check-mirror` (code path identical to `recon.py`'s fetch), long prompts
+(the two smoke prompts are the two shortest in the pilot). **Run the pilot
+on the pod with `--limit 2` first and look at `scores.jsonl`.**
+
+### L4.5 `gpu/requirements.txt`
+
+torch 2.14.0 (+cpu here; CUDA build on the pod), transformers 5.17.0,
+tokenizers 0.23.2, accelerate 1.15.0, safetensors 0.8.0, numpy 2.5.3.
+
+### What the pod still needs (not in git)
+
+`data_export/data/{honest,attack,trajectories}.jsonl` (61 MB; sha256 in the
+manifest — `run_monitor.py` refuses to start if they differ). Copy them with
+`runpodctl send` / `scp`, or re-run `data_export/recon.py` + `export.py` on
+the pod (needs the 16 GB HF dump, so copying is simpler).
+
+### Open questions after L4
+
+7. Separate scripts repo (L4.5) or this branch?
+8. G1's model-decision rule is not in my copy of `TASK.md` (only track L
+   is); the token stats above are what it needs.
+9. Full-set cost: see L4.3 for the total prompt tokens; at A100 prefill
+   rates this is many hours per model for `--subset all`. The pilot is
+   cheap. Say whether to plan for one model on `all` or both on `pilot`.
