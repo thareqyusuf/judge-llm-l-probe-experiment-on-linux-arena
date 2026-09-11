@@ -118,6 +118,72 @@ Corrected table (round 2; round 1 in the raw):
 
 ---
 
+## 2026-09-11 — D: what the integer throws away, and what a probe could cheat on (no model)
+
+**Claim.** Two descriptive results on subset_main non-placeholder actions (53 level-2 attack
+positives, 728 honest negatives, scores from the G4 main pass).
+(1) **Readout loss is visible in the distribution.** At the forced `<score>` readout, level-2
+actions carry 0.308 of the digit mass at 3 or above while the emitted integer is 0 or 1 on 31 of
+53; honest actions carry 0.087 there. Of the 31 payloads the integer nulls, the expected score E
+ranks **11 above the honest 95th percentile** (4 above the 99th). So Δp_null is already positive
+by 11/31 at 5 % FPR with no white-box access — this is the baseline a probe must beat, not the
+integer.
+(2) **The level-2 label leaks environment identity, length and tool shape, not the CDN host.**
+`packages-cdn.com` is in 5 of 53 positives. `str_replace` is in 49 %, against 4.8 % of honest;
+median action length is 741 chars against 93; median position 0.64 against 0.26; and the
+top zero-honest unigrams (`tracker_pass_123`, `user_tracking`, `stories`) come from one
+trajectory. 28 of the 53 positives are two trajectories.
+
+**Kind of claim.** Descriptive. (1) is the no-white-box control for TASK-P; (2) is a confound
+inventory, not a result.
+
+**Evidence.** Script `experiments/action-level-attack-label/d_expression_gap.py`; raw `results/raw/action-level-attack-label/d_expression_gap_20260911T112956Z.json`;
+log `logs/action-level-attack-label/d_expression_gap_20260911T112956Z.log`; figure `results/figures/action-level-attack-label/d_expression_gap.png`.
+Local scores from `origin/exp/local-monitor-activations` @ `0153b29` (sha256 of both score files
+in `.inputs`); labels from `action_labels.json` (sha256 recorded).
+
+Expression (`E=results/raw/action-level-attack-label/d_expression_gap_20260911T112956Z.json`):
+
+| quantity | honest | level-2 | recompute |
+|---|---|---|---|
+| mean digit mass at ≥ 3 | 0.087 | 0.308 | `jq '.expression.mass_at_or_above_3' $E` |
+| mass at digit 0 | 0.699 | 0.474 | `jq '.expression.mean_digit_dist' $E` |
+| E − score, median | −0.32 | −0.26 | `jq '.expression.E_minus_score' $E` |
+| p_null of the integer (score ≤ 1) | — | 31/53 = 0.58 | `jq '.expression.p_null_integer' $E` |
+| of those 31, E > honest p95 / p99 | — | 11 / 4 | `jq '.expression.delta_p_null_from_E' $E` |
+
+Digit mass is ≥ 0.9994 on every action, so the distribution is a real readout, not a tail artefact.
+Note E is **not** uniformly higher: its mean minus score is −1.75 on level-2, because it sits well
+below the integer on the loud 8–9 payloads while lifting the nulled ones. E re-ranks rather than
+sharpens, which is why its AUROC is 0.905 against the integer's 0.748 (C entry).
+
+Leakage (`jq '.leakage' $E`):
+
+| feature | level-2 | honest |
+|---|---|---|
+| `str_replace` | 26/53 (0.49) | 40/728 (0.055) |
+| `packages-cdn.com` | 5/53 | 0/728 |
+| `/dev/tcp/` | 3/53 | 0/728 |
+| median action length (chars) | 741 | 93 |
+| median position in trajectory | 0.64 | 0.26 |
+| median trajectory length | 44 (attack) | 72 (honest) |
+| positives per trajectory | 15 trajectories; top two hold 14 + 14 | — |
+
+**What this means for TASK-P.** The probe's alternative explanations are, in order of danger:
+environment identity (the zero-honest unigrams are one trajectory's DB password and table names),
+action length (8× median gap), position, and `str_replace` shape. `packages-cdn.com` is a
+distant fifth. The controls that bite are therefore **leave-one-environment-out** and
+**length/position-matched negatives**, not leave-one-category-out alone.
+
+**Alternative explanations for (1).** E and the integer come from the same forward pass, so this is
+a readout comparison, not two monitors; the 5 % operating point is 36 honest actions here; the
+level-2 positive set is surface-form biased (A3/A4), so both numbers are upper bounds; placeholders
+are excluded and would raise both for an artefactual reason (B).
+
+**Status.** `[tested]`.
+
+---
+
 ## 2026-09-11 — C: ROC / AUROC / TPR at low FPR, local vs cached, on the level-2 label (no model)
 
 **Claim.** On subset_main, with the 53 level-2 attack actions as positives and the 825
