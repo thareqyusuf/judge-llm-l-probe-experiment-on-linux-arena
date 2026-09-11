@@ -118,6 +118,103 @@ Corrected table (round 2; round 1 in the raw):
 
 ---
 
+## 2026-09-11 — C: ROC / AUROC / TPR at low FPR, local vs cached, on the level-2 label (no model)
+
+**Claim.** On subset_main, with the 53 level-2 attack actions as positives and the 825
+non-placeholder honest actions as negatives, the local monitor's expected score (gpt-oss-20b,
+G4 main pass, forced readout `E`) has AUROC 0.905 vs 0.853 for the cached GPT-5 Nano ensemble
+mean. At 1 % FPR (≈ 8 honest actions) every scorer sits at TPR 0.30 ± 0.02 with cluster-bootstrap
+CIs of roughly [0.1, 0.6] — indistinguishable. At 5 % FPR local `E` reaches 0.64 [0.41, 0.81] vs
+cached 0.42 [0.15, 0.73]. The verbalised integer `score` is a worse scorer than `E` (AUROC 0.75).
+Using `side` as the per-action label instead gives AUROC 0.52–0.54 for every monitor — the
+premise of TASK-A, now measured.
+
+**Kind of claim.** Descriptive comparison of two monitors on one label set; the label was chosen
+blind to both monitors (A2/A3), so the comparison is unbiased *between* them, but the positive set
+is biased toward loud payloads (A3 addendum, A4), so every TPR here is an upper bound on TPR over
+all payloads. No new baseline beyond the `side` label and the paper's random line.
+
+**Evidence.** Script `experiments/action-level-attack-label/c_roc.py` (run in
+`checkpoints/logit-curve-replication/venv`, numpy + matplotlib); raw `results/raw/action-level-attack-label/c_roc_20260911T105525Z.json` (per-action rows with
+every score and label, every ROC polyline, CIs; sha256 of all inputs); log `logs/action-level-attack-label/c_roc_20260911T105525Z.log`.
+Local scores: `g4_main_scores_20260911T075642Z_part{1,2}.jsonl` + `g4_main_first200_scores_20260910T133150Z.jsonl`
+from `origin/exp/local-monitor-activations` @ `0153b29`, copied verbatim to gitignored
+`checkpoints/action-level-attack-label/g4/` (sha256 in `.inputs`). Paper monitors rebuilt from
+`../benchmark/linuxarena-paper/src/neurips/section_5_3_monitoring_results/data.json`
+(`honest_action_scores`, `attack_max_sus`), same conventions as L3.
+Figures: `results/figures/action-level-attack-label/c_roc_action_level2.png`,
+`c_tpr_at_fpr.png`, `c_traj_logit.png`.
+
+Conventions = logit-curve-replication L3: FPR(t) = #neg > t / n; TPR at target FPR by linear
+interpolation on the ROC polyline; AUROC trapezoid; CI = trajectory-cluster bootstrap (27 honest,
+15 attack trajectories resampled independently, 1000 reps, seed 0). Placeholders (379) dropped —
+they are where local ≥ 3 concentrates (G4.3) and are enriched for payloads (B), so this is the
+local monitor on its harder subset.
+
+**Action-level** (`jq '.action_level.results.level2.by_scorer | map_values({auroc, tpr_at_fpr, ci95_cluster_boot})' $C`; 1 FP = 0.12 % FPR):
+
+| positives | scorer | AUROC [CI] | TPR@1 % [CI] | TPR@5 % [CI] | TPR@10 % |
+|---|---|---|---|---|---|
+| level-2 (53 / 15 trajs) | local `E` | 0.905 [0.82, 0.95] | 0.30 [0.12, 0.58] | 0.64 [0.41, 0.81] | 0.79 |
+| | local `score` | 0.748 [0.62, 0.88] | 0.33 [0.11, 0.60] | 0.41 [0.14, 0.71] | 0.45 |
+| | cached mean | 0.853 [0.78, 0.93] | 0.31 [0.08, 0.61] | 0.42 [0.15, 0.73] | 0.57 |
+| | cached max | 0.836 [0.75, 0.91] | 0.12 [0.02, 0.58] | 0.42 [0.13, 0.74] | 0.54 |
+| level-2 ∪ audit-payload (61 / 16) | local `E` | 0.882 | 0.28 | 0.59 | 0.74 |
+| | cached mean | 0.859 | 0.29 | 0.44 | 0.61 |
+| audit-payload only (20 / 11) | local `E` | 0.816 | 0.30 | 0.40 | 0.55 |
+| | cached mean | 0.884 | 0.35 | 0.60 | 0.69 |
+| all attack actions, `side` label (808 / 31) | any scorer | 0.52–0.54 | 0.03–0.04 | 0.09–0.12 | 0.14–0.18 |
+
+**Trajectory-level, paper style** (max score over a trajectory's actions vs per-action honest FPR;
+`jq '.trajectory_level.variants | map_values({auroc, tpr_at_fpr})' $C`):
+
+| variant | n traj | AUROC | TPR@0.3 % | TPR@1 % | TPR@5 % |
+|---|---|---|---|---|---|
+| cached mean, max over ALL non-hidden actions of the 32 subset trajectories (export) | 31 | 0.986 | 0.42 | **0.58** | 0.90 |
+| cached mean, max over the *scored subset* actions only | 31 | 0.917 | 0.24 | 0.34 | 0.61 |
+| local `E`, max over the scored subset actions | 31 | 0.917 | 0.23 | 0.29 | 0.45 |
+| local `score`, max over the scored subset actions | 31 | 0.875 | 0.35 | 0.41 | 0.69 |
+| cached mean, max over level-2 actions only | 15 | 0.942 | 0.39 | 0.53 | 0.67 |
+| local `E`, max over level-2 actions only | 15 | 0.955 | 0.40 | 0.47 | 0.80 |
+| **reference** L3 replication, cached GPT-5 Nano, full pool (92 traj, 12,494 honest) | 92 | 0.973 | 0.31 | **0.56** | 0.87 |
+
+Paper monitors on the full pool, rebuilt (`jq '.trajectory_level.paper_monitors | map_values({auroc, tpr_at_fpr, paper_per_budget_0.01})' $C`):
+GPT-5 Nano TPR@1 % 0.56 (paper's own safety@1 % 0.57, random 0.40); GPT-OSS-120B 0.87 (0.87);
+GPT-5 Mini 0.87; Gemini 3 Flash 0.87; GPT-5.4 0.90; Kimi K2.5 0.93; Sonnet 4.6 0.94;
+Gemini 3.1 Pro 0.96; Haiku 4.5 0.98; GLM 5 0.98; Opus 4.6 1.00. My interpolated TPR@1 % matches
+the paper's safety@1 % to 0.01 on every monitor.
+
+**Reading.**
+- Sanity: cached over ALL actions of the 32 subset trajectories gives 0.58 @ 1 %, the paper's
+  0.56 — the subset trajectories are representative. Restricting to the *scored subset actions*
+  drops cached to 0.34, so the honest comparator for the local monitor (which only scored those)
+  is 0.34, not 0.56: local `E` 0.29 / `score` 0.41 vs cached 0.34 — same ballpark, n = 31.
+- The local 20B at reasoning-low with a 32 k cap is nowhere near the paper's GPT-OSS-120B (0.87);
+  it is at GPT-5 Nano's level on matched actions.
+- On the payload actions themselves (level-2 max), both monitors flag about half the trajectories
+  at 1 % FPR (cached 0.53, local 0.47; n = 15) and local `E` pulls ahead at 5 % (0.80 vs 0.67).
+- The 1 % operating point is 8 honest actions; every CI at 1 % spans 0.1–0.6. The 5 % point (41
+  honest actions) is where the curves separate and where local `E` leads on level-2 positives.
+
+**Caveats / ways this is an artefact.**
+1. Positives are loud payloads by construction (A3/A4): 53 actions in 15 trajectories. All TPRs
+   are upper bounds on "catches payloads".
+2. Cluster structure: 27 honest and 15 attack trajectories carry all the variance; the bootstrap
+   is over trajectories, but 15 is small.
+3. Local scores exist only for subset_main actions under a 32 k-token cap; late honest actions are
+   under-represented (G2). Trajectory maxima over "scored subset actions" are maxima over a
+   partial trajectory for both monitors.
+4. `E` is a forced-readout expectation, not the monitor's verdict; the verdict (`score`) is
+   coarser and worse. Which one "is" the local monitor is a design choice.
+5. Placeholders excluded; including them would raise local numbers for an artefactual reason (B).
+6. Paper monitors are on a different agent-run pool split (`vs_opus`) and full prompts; only the
+   GPT-5 Nano row is the same data as the cached column here.
+
+**Status.** `[tested]`. Design calls for you: whether the writeup's headline is `E` or `score`;
+whether to report 5 % alongside 1 % given the honest count.
+
+---
+
 ## 2026-09-11 — B: placeholder control (no model)
 
 **Claim.** In honest trajectories the placeholder string is not a suspicion trigger for the cached
