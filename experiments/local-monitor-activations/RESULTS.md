@@ -1338,13 +1338,88 @@ been wired into it.
 
 ## Verification (VERIFY.md)
 
-Filled in by the review session, on this branch, before merge to main.
+Filled in by the review session, on this branch, before merge to main. One subsection per stage.
 
-**Verdict.** Verified / Verified but weaker than stated / Not verifiable from what's here / Wrong
+### G1 (environment + attention backend) — reviewed 2026-09-11
 
-**What was recomputed.**
+**Verdict: Verified but weaker than stated.** Every number in the G1 entry appears verbatim in its raw
+file and the environment/blocker claims recompute. The attention-numerics *attribution* is right in
+mechanism but the entry lets the reader infer more than the evidence shows (see "weaker" below).
+
+**What was recomputed (no model; pod CPU + a 5-second model-free GPU unit check).**
+- Env checks: `jq '.checks' g1_env_20260910T070739Z.json` → 11/14 true; the 3 false are
+  `monitor_data_recompute_matches_manifest` (explained, see next), `export_data_files_present_and_match`
+  (blocker, later cleared), `flex_attention_works` (the finding). Capability `[12,0]`, CUDA 13.0, 12.83 GiB
+  allocated, `quantizer_dequantize_flag=false`, expert tensors `FloatType(e2m1)`: all as stated.
+- The honest `monitor-data` fingerprint mismatch: re-ran the `recompute_fingerprint` formula on
+  `checkpoints/…/data/api/monitor-data_f25f1eaf….json`: as-is → `3001fb1e…` (what the raw records);
+  with `mt` forced to 132 → `190c8878…` == the lean/manifest value. The explanation is correct, **but it is not
+  in any raw file or script** — only in RESULTS prose pointing at "the session log". One-liner that settles it:
+  `python -c "import json,hashlib;…"` (formula in `g1_env.py:162-182`, override `mt=132`).
+- Export files: `sha256sum checkpoints/…/data/export/*.jsonl` and `wc -l` recomputed here match the manifest
+  (attack 5,097 / honest 12,675 / trajectories 292). Same gap: `g1_export_files_…json` has no script in the repo.
+- Sinks dtype read independently from the safetensors headers under `$HF_HOME`: `model.layers.*.self_attn.sinks` **BF16 [64]**.
+- All numerics tables: `jq '.results' g1_attn_probe2_…json` and the `.cases` map on `g1_attn_unit_…075628Z.json`
+  reproduce every cell (4.9375 / 0.16694 / 26/79 / 0.9747; 0.015625; 0.000637 vs 0.000700; 8/8 bf16 rows
+  chunked mean-closer to fp64; 131k: 512.9 s, 28.04 GiB peak with `expandable_segments`).
+- Model-free decomposition (random q/k/v, gpt-oss shapes, Q=K=79 and 2048): a re-implementation of eager's
+  formula with the softmax dtype as a knob gives **bitwise 0** vs `chunked_eager` when run in fp32 over the
+  *bf16-rounded* sink, and **bitwise 0** vs transformers' eager when run in bf16. So at the function level the
+  one and only difference is the dtype the softmax (exp/sum/divide, sink column included) runs in.
+  chunked uses the *same* bf16 sink value as eager — it does not have a "more precise sink".
+
+**Weaker than stated — what the entry lets a reader believe vs what the evidence shows.**
+1. "That one difference accounts for the model-level logit gap." The mechanism holds by elimination for the
+   single-chunk case (unit test: fp32-softmax arm bitwise equal to eager in every single-chunk case, so nothing
+   else differs). But the *size* of the gap (max |Δlogit| 4.94, 2/79 argmax flips) is not a property of the
+   softmax dtype: in the same raw file, `chunked_multi vs chunked_single_1` at rand2048 — identical dtypes,
+   only the query-chunk reduction order changes — gives max 1.49, the same as chunked-vs-eager (1.48).
+   Any 1-ulp attention perturbation is amplified to O(1) logits by MoE routing. The correct sentence is
+   "chunked and eager are two equally valid bf16 evaluations that differ by one bf16 ulp at the attention
+   output; the model amplifies one ulp to O(1) logits", not "eager's bf16 softmax explains the gap".
+   The decisive model-level test — `chunked_eager` with `softmax` run in bf16 vs eager, expecting Δ = 0 —
+   was not run. It is a one-line patch and ~1 min with the model resident; it would make (1) airtight.
+2. The unit test's "fp32 sinks" arm is not a sinks-only control. `torch.cat([bf16 scores, fp32 sinks])`
+   promotes to fp32 (checked: `torch.cat` → float32), so in that arm *eager itself* runs an fp32 softmax.
+   That is why it is bitwise equal — it shows every other part of chunked (GQA broadcast, band slicing,
+   `-inf` vs `finfo.min` mask) is identical to eager, which is a useful result, but it is not "eager with
+   fp32 sinks". The RESULTS wording "with fp32 sinks, chunked is bitwise equal" is literally true and misleading.
+3. "flex_attention fails at decode." From the raw error strings: default kernel options fail with the inductor
+   `LoweringException … BLOCK_M=1024` at **q_len = 79 prefill** too (`flex/default/compare_error`), and with
+   working `kernel_options` the failure in `generate()` is `ValueError: model_kwargs not used: ['kernel_options']`
+   — transformers kwarg validation, not a kernel failure. Flex forward at 2048 works (probe2, max Δ 1.41 vs eager).
+   So flex is "not usable through `generate()` as shipped", not "cannot run long prompts"; its long-prompt
+   memory was never measured (g1_env's planned 4k/16k flex prefills never ran).
+4. "eager is O(L²) memory" is an arithmetic argument (64·L²·2 B = 80 GB at 25k); eager was measured only at 79
+   and 2048 tokens (15.16 GiB), never to OOM. Correct, but not measured.
+5. "runs a 131k-token prefill within VRAM" needs `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
+   (probe 1 OOM'd at 131k), `logits_to_keep=1`, no generation, no hooks; peak 28.04 of 31.36 GiB. The RESULTS
+   table says so; the one-paragraph claim does not. The only correctness check at ≥ 4k is `logits_finite`.
+6. Numerics were measured on a 79-token natural prompt and 2048 *random* tokens; the natural-text gap is 3×
+   the random-token gap. The regime that matters (≤ 32k natural tokens) was not measured at G1 — G3's chunk-size
+   noise floor at `prompt_end` (|ΔE| ≈ 0.05) is the downstream answer.
+
+**Provenance findings.**
+- All five G1 raw files record `git_commit ce1babc`, at which **none of the G1 scripts exist** (first committed in
+  `6645403`). The claim notes this. Consequence: the run cannot be tied to a script by hash; the logs (committed)
+  match the raw files line for line, which is the only evidence the committed scripts are what ran.
+- `chunked_attention.py` was edited after the G1 runs (`0dd6b78`: adds `CHUNK_SIZE`, +8/−2). With
+  `CHUNK_SIZE=None` (the default, and what G1 used) the arithmetic path is unchanged; it is not the byte-identical file.
+- `g1_attn_probe.py:116` writes `prefill256_max_abs_logit_diff_vs_eager_last` as `… if False else None` — dead
+  code; the `null` in the raw file was never measured.
+- Two raw-level claims (mt=132 reproduction; export sha256) have no script — see above.
 
 **Dumbest ways this could be wrong, and what rules each out.**
+- *Chunked has a masking/band-slicing bug that happens to look like a dtype effect.* Ruled out: fp32-softmax arm
+  bitwise equal to eager in all four single-chunk cases and within 1 ulp on < 2e-6 of elements at 128–256 chunks,
+  with and without the sliding window, prefill and decode; greedy generation on chat79 identical to eager.
+- *The 4.9-logit gap means chunked is broken.* Not ruled out by the gap itself (see weaker-1); ruled out by the
+  function-level test plus `chunked_multi vs single` showing the same magnitude from chunking alone.
+- *The number in RESULTS is not the number in the raw.* Checked every table cell; all present verbatim.
+- *The model is not really MXFP4.* Ruled out: `dequantize=false`, expert dtype `e2m1` read off the module,
+  12.83 GiB allocated (bf16 would be ~40 GB).
+- *The fingerprint "pass" hides a real data mismatch.* Ruled out by reproducing the `mt=132` fix-up here;
+  ids, action counts and sus sum agree between the two payloads.
 
 ---
 
