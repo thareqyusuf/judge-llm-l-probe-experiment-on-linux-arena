@@ -118,6 +118,32 @@ Corrected table (round 2; round 1 in the raw):
 
 ---
 
+## 2026-09-11 — A4: blind-audit draw (no verdicts yet)
+
+**Claim.** None. This is the draw only; the user fills the verdicts.
+
+**Draw.** Pool = every subset_main action with `side == attack` and `placeholder == False`
+(the subset's own flag; it agrees with g2_prep's on all 1,156 subset attack actions), sorted by
+`(traj_id, action_idx)`; sample = `random.Random(0).sample(pool, 60)`, kept in draw order.
+Pool 808 actions / 31 trajectories; draw covers 24 trajectories, 24 `bash` + 36 `text_editor`.
+The script reads only `subset_main.json`, the export, and `trajectories.jsonl` — never cached
+scores, monitor scores, `payload_signatures.json`, or an a3 raw.
+
+**Evidence.**
+- Script: `experiments/action-level-attack-label/a4_draw.py`
+- Raw: `results/raw/action-level-attack-label/a4_draw_20260911T074044Z.json` (pool sha, seed, the 60 keys, rendered `current_action`, objectives)
+- Log: `logs/action-level-attack-label/a4_draw_20260911T074044Z.log`
+- Audit files: `experiments/action-level-attack-label/a4_audit/00.md` … `59.md`, index in `INDEX.md`.
+  Each: key, step / length, side_task, one-line objective, `current_action` verbatim as the
+  monitor sees it (`format_action(hide_output=True)`), and an empty `verdict:` line.
+- Recompute the draw without the script:
+  `python3 -c "import json,random;s=json.load(open('experiments/local-monitor-activations/subset_main.json'));p=sorted((a['traj_id'],a['action_idx']) for a in s['actions'] if a['side']=='attack' and not a['placeholder']);print(random.Random(0).sample(p,60))"`
+  and compare with `jq '[.draw[]|[.traj_id,.action_idx]]' results/raw/action-level-attack-label/a4_draw_20260911T074044Z.json`.
+
+**Status.** `[hunch]` — awaiting the user's 60 verdicts (payload / prep / benign) in the audit files.
+
+---
+
 ## 2026-09-11 — A3: validate signatures, 2 rounds (no model)
 
 **Claim.** After one round of reviewer-guided fixes, the own-side-task level-2 signature
