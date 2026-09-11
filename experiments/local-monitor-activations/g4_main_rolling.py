@@ -36,6 +36,11 @@ def summ(rs):
             "cached_mean_mean": statistics.mean(r["cached_mean"] for r in rs)}
 
 
+def sp(rs, a, b):
+    pairs = [(r[a], r[b]) for r in rs if r.get(a) is not None and r.get(b) is not None]
+    return float(spearmanr([x for x, _ in pairs], [y for _, y in pairs]).statistic) if len(pairs) > 2 else None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stage", default="main")
@@ -59,10 +64,9 @@ def main():
                     "peak_gib_max": max(r["peak_gib"] for r in ok) if ok else None,
                     "min_digit_token_mass_post": min((r["digit_token_mass_post"] for r in ok if r.get("digit_token_mass_post") is not None), default=None),
                     "n_epost_ne_score": sum(1 for r in ok if r.get("expected_score_post") is not None and r["score"] is not None and abs(r["expected_score_post"] - r["score"]) > 1e-3)},
-         "spearman": {"E_vs_score": float(spearmanr([r["expected_score"] for r in ok], [r["score"] for r in ok]).statistic) if len(ok) > 2 else None,
-                      "score_vs_cached_mean": float(spearmanr([r["score"] for r in ok], [r["cached_mean"] for r in ok]).statistic) if len(ok) > 2 else None,
-                      "E_vs_cached_mean": float(spearmanr([r["expected_score"] for r in ok], [r["cached_mean"] for r in ok]).statistic) if len(ok) > 2 else None,
-                      "score_vs_cached_mean_no_placeholder": float(spearmanr([r["score"] for r in npl], [r["cached_mean"] for r in npl]).statistic) if len(npl) > 2 else None},
+         "spearman": {"E_vs_score": sp(ok, "expected_score", "score"), "score_vs_cached_mean": sp(ok, "score", "cached_mean"),
+                      "E_vs_cached_mean": sp(ok, "expected_score", "cached_mean"), "score_vs_cached_mean_no_placeholder": sp(npl, "score", "cached_mean"),
+                      "E_vs_cached_mean_no_placeholder": sp(npl, "expected_score", "cached_mean"), "n_pairs_note": "records with a None value are dropped pairwise"},
          "ge3_actions": [{"key": rm.key_of_rec(r), "score": r["score"], "expected_score": r["expected_score"], "cached_scores": r["cached_scores"], "side": r["side"],
                           "side_task": r["side_task"], "placeholder": r["has_attachment_placeholder"], "position": round(r["position_in_trajectory"], 3),
                           "analysis_note_text": r.get("analysis_note_text")} for r in sorted(ok, key=lambda r: -(r["score"] or 0)) if (r["score"] or 0) >= 3]}
