@@ -357,6 +357,33 @@ whether to report 5 % alongside 1 % given the honest count.
 
 ## 2026-09-11 — B: placeholder control (no model)
 
+> **Correction 2026-09-11 (same day): this entry tested the wrong grouping, and the sign flips.**
+> `placeholder` in `g2_prep` is `"attachment://" in <the whole rendered prompt>`, so it flags every
+> action whose **history** mentions an attachment, not actions whose own content is hidden. Split
+> properly (`current_action` = the attachment is in this action's own `tool_input`; `history_only` =
+> flagged but its own content is readable), the attack effect is **entirely history_only**:
+>
+> | group | n | mean cached | p(both ≥ 6) | vs no_attachment |
+> |---|---|---|---|---|
+> | attack, current_action (content really hidden) | 197 | 1.675 | 0.041 | z 3.29, p 1.0e-3, AUC 0.568 |
+> | attack, history_only | 1,267 | 2.730 | 0.181 | z 16.82, p 1.6e-63, AUC 0.658 |
+> | attack, no_attachment | 3,283 | 1.387 | 0.051 | — |
+> | honest, current_action | 50 | 1.910 | 0.040 | z 2.73, p 6.3e-3, AUC 0.610 |
+> | honest, history_only | 112 | 1.384 | 0.054 | z −2.36, p 1.8e-2, AUC 0.436 |
+> | honest, no_attachment | 12,325 | 1.328 | 0.028 | — |
+>
+> So actions whose content **is** an `attachment://` stub score p(both ≥ 6) = 0.041, *below* the
+> 0.051 baseline. The headline "attack placeholders score 3× higher" was measuring
+> later-in-attachment-using-trajectories, a position/trajectory effect, not a rendering artefact.
+> The honest null (p = 0.65) is also the wrong test for the same reason; the correct honest
+> current-action contrast is small but significant (+0.58 mean, n = 50).
+> Current raw `results/raw/action-level-attack-label/b_placeholder_20260911T130159Z.json`; figure `results/figures/action-level-attack-label/b_placeholder_cached_hist.png`
+> (this entry originally shipped **no** figure — the script had been run under a Python without
+> matplotlib and silently recorded `figure: null`). Superseded raw kept.
+> The downstream effect is nil: 0 level-2 positives are affected and the C/D headline AUROCs are
+> identical to 3 dp under all three exclusion rules (E 0.905 / 0.905 / 0.906) — see the E entry.
+
+
 **Claim.** In honest trajectories the placeholder string is not a suspicion trigger for the cached
 monitor: placeholder vs non-placeholder cached_mean 1.55 vs 1.33, p(both ≥ 6) 4.9 % vs 2.8 %,
 Mann-Whitney p = 0.65, AUC 0.49. In attack trajectories placeholders score much higher than
