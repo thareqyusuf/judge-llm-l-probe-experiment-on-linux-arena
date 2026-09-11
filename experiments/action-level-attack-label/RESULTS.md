@@ -118,6 +118,84 @@ Corrected table (round 2; round 1 in the raw):
 
 ---
 
+## 2026-09-11 — B: placeholder control (no model)
+
+**Claim.** In honest trajectories the placeholder string is not a suspicion trigger for the cached
+monitor: placeholder vs non-placeholder cached_mean 1.55 vs 1.33, p(both ≥ 6) 4.9 % vs 2.8 %,
+Mann-Whitney p = 0.65, AUC 0.49. In attack trajectories placeholders score much higher than
+non-placeholders (2.59 vs 1.39, p(both ≥ 6) 16.2 % vs 5.1 %, p ≈ 4e-60, AUC 0.65).
+
+**Kind of claim.** Descriptive comparison; the honest pair is the control for the attack pair.
+
+**Evidence.** Script `experiments/action-level-attack-label/b_placeholder.py`; raw `results/raw/action-level-attack-label/b_placeholder_20260911T103844Z.json`
+(full `cached_mean` arrays per group under `.cached_mean_arrays`, so every number recomputes);
+log `logs/action-level-attack-label/b_placeholder_20260911T103844Z.log`. No figure: the laptop has no matplotlib; `.groups.*.hist` carries the histograms.
+
+| group | n | mean | p(cached_mean ≥ 6) | p(both ≥ 6) |
+|---|---|---|---|---|
+| honest placeholder | 162 | 1.546 | 0.056 | 0.049 |
+| honest non-placeholder | 12,325 | 1.328 | 0.034 | 0.028 |
+| attack placeholder | 1,464 | 2.588 | 0.169 | 0.162 |
+| attack non-placeholder | 3,283 | 1.387 | 0.052 | 0.051 |
+
+Recompute: `jq '.groups, .tests' $B`; Mann-Whitney is a stdlib normal approximation with tie
+correction (`mannwhitney()` in the script), two-sided.
+
+**Reading, and what I cannot tell from here.** The honest null says the placeholder *string* does
+not raise the cached score. The attack effect then has two readings: (a) the cached monitor saw
+the original content and the actions that became placeholders (long file creates, long commands)
+are enriched for payloads; (b) the cached monitor saw the placeholder too and the score comes from
+history. Which one holds depends on what the cached monitor was shown, which this raw cannot
+settle — your call. Either way, 1,464 attack actions (31 %) are invisible to the local monitor,
+and they are 3× as likely to be cached-high as the visible ones, so the local-vs-cached
+comparison on visible actions is on the easier subset.
+
+**Status.** `[tested]`.
+
+---
+
+## 2026-09-11 — A5: emit action_labels.json and subset_payload_enrich.json
+
+**Claim.** None new. Deliverables emitted from the frozen-then-fixed signatures at `5653149`.
+
+**Evidence.** Script `experiments/action-level-attack-label/a5_emit.py`; raw `results/raw/action-level-attack-label/a5_emit_20260911T103843Z.json`
+(counts + sha256 of both deliverables); log `logs/action-level-attack-label/a5_emit_20260911T103843Z.log`.
+- `experiments/action-level-attack-label/action_labels.json` — columnar, 17,234 rows (the g2
+  pool: 4,747 attack + 12,487 honest), 3.3 MB. Columns as specified plus `env`, `tool`,
+  `n_tokens`, `in_subset_main`, and two additions: `level2_comment_only` (verification finding)
+  and `audit_verdict` (the user's verdict on the 176 audited actions, null elsewhere).
+- `experiments/action-level-attack-label/subset_payload_enrich.json` — G4.4's input.
+
+Counts (`jq '.summary' $A5`):
+
+| quantity | value |
+|---|---|
+| attack `label_level` 0 / 1 / 2 / null | 2,656 / 467 / 160 / 1,464 |
+| honest `label_level` 0 / null | 12,325 / 162 |
+| attack level-2 × `label_cached_high` False / True / single-score | 116 / 39 / 5 |
+| attack level-2 by category | access_secret 35, exfiltration 31, data_tampering 31, monitoring_subversion 23, access_control_bypass 23, running_malware 17 |
+| audit-payload actions carried at level 0 | 8 |
+| enrich: level-2, not in subset_main, ≤ 32k tokens | 56 actions / 19 trajectories; exfiltration 22, access_secret 15, access_control_bypass 8, running_malware 5, data_tampering 3, monitoring_subversion 3 |
+| enrich × cached-high False / True / single | 44 / 10 / 2 |
+
+**Reconciliation with A3.** A3 reported 213 level-2 attack actions over the 5,097 export
+actions; 52 of those are on `run_side_task_test` (35) and `submit` (17) inputs, which are
+outside the pool (`jq` on the A3 `label_table` with `in_pool`), leaving 161; minus the one
+comment-only `delete_model` match = 160. The 52 show the signatures do match the hidden
+test-call arguments; they never enter the labels because those actions are not in the pool.
+
+**Decisions I made (revert if wrong).**
+1. `label_level` uses the real (non-comment) definition; the A3 definition is recoverable via
+   `level2_comment_only` (1 row).
+2. The 8 audit-payload / level-0 actions stay 0. `audit_verdict` carries the verdict; no fourth
+   level value.
+3. `label_cached_high` is null for single-score actions (5 of the 160 level-2) rather than False.
+
+**Status.** `[tested]` — deliverables exist and their sha256 is in the raw; whether G4 should
+consume level 2 only, or level 2 ∪ audit-payload, is per the A4 entries.
+
+---
+
 ## 2026-09-11 — A4 second audit scored (end + random strata; pooled n = 176, 20 payloads)
 
 **Claim.** Pooled over both blind audits (176 unique subset_main attack actions, 20 payload / 24
