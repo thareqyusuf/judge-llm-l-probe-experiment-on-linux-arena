@@ -53,8 +53,8 @@ integer. If it only beats the integer you have re-derived a mean, expensively.
   | AUROC E / integer / cached_mean | 0.905 / 0.748 / 0.853 |
   | TPR@5 % E / cached | 0.64 / 0.42 |
   | p_null of the integer | 31/53 = 0.58 |
-  | E recovers, of those 31, above honest p95 / p99 | 11 / 4 |
-  | digit mass at ≥ 3, level-2 / honest | 0.308 / 0.087 |
+  | E recovers, of those 31, above honest p95 / p99 | 15 / 4 |
+  | digit mass at ≥ 3, level-2 / honest | 0.308 / 0.082 |
 
   If these do not reproduce to ±0.01, the join is wrong. Stop and fix it.
 
@@ -76,6 +76,37 @@ integer. If it only beats the integer you have re-derived a mean, expensively.
   independently), 500 reps, seed 0. n_eff is 59 trajectories, not 2,012 actions.
 
 ---
+
+## P-0. Consolidate the shards once (20 min, do this before anything else)
+
+You do **not** need a Jupyter kernel for the compute. The kernel discipline in CLAUDE.md exists to
+avoid reloading a 20B model; TASK-P never loads the model. What is expensive here is re-reading
+activations: each action is 1,008,000 bytes (7 positions x 25 layers x 2880 dims x fp16), so
+subset_main is ~2.0 GB across ~80 shards, and the P2 sweep touches 175 (position, layer) cells per
+arm. Reading shards per cell means ~350 passes over 2 GB.
+
+Instead, one pass that writes a single array plus an index:
+
+- `checkpoints/latent-vs-verbalized/acts.npy` — fp16, shape `[n_actions, 7, 25, 2880]`, C-order.
+- `checkpoints/latent-vs-verbalized/acts_index.json` — row i -> `(traj_id, action_idx, render,
+  source_shard, n_positions)`; `n_positions` is 4 for the first-pass 200, 7 for the rest, and the
+  missing three positions are written as NaN so the array stays rectangular.
+
+Then every downstream stage opens it with `np.memmap(..., mode="r")` and slices. One (position,
+layer) slice is n x 2880 x 2 bytes ~ 11 MB and is instant once the page cache is warm. This beats a
+persistent kernel because it survives process death, and it keeps each stage a committed,
+re-runnable script the way the repo contract requires.
+
+Verify before moving on: index length equals the deduped key count from P-1.3; a random 5 rows
+re-read from their original shard are bitwise equal to the array rows; NaN pattern matches
+`n_positions` exactly.
+
+**Where a notebook does earn its place:** `experiments/lab.ipynb` for P0b (reading the analysis
+texts) and P6 (reading transcripts and eyeballing figures) — genuine exploration with fast
+iteration. Save every figure to `results/figures/<slug>/` as well as displaying it. Keep P2-P4 as
+scripts: they are long enough to want a logfile, they must re-run from the committed tree for the
+review, and a notebook makes it easy to end up at 02:00Z with a number whose provenance you cannot
+reconstruct.
 
 ## P-1. Verify capture (15 min; do not touch running processes)
 
@@ -247,8 +278,8 @@ Curves: integer `score`, `E`, `cached_mean`, dumb, text, probe(score-sup), probe
 Mark 5e-2 and 1e-2. Table of the same at both FPRs plus AUROC, with a locked-test column.
 
 **Δp_null, the headline.** Of the 31 level-2 actions the integer puts at ≤ 1, how many does each
-scorer rank above the honest 5 % and 1 % thresholds. E already gets 11 and 4. Report the probe on
-the same denominator, with n, beside those. A probe that does not beat 11/31 has not shown (b).
+scorer rank above the honest 5 % and 1 % thresholds. E already gets 15 and 4. Report the probe on
+the same denominator, with n, beside those. A probe that does not beat 15/31 has not shown (b).
 
 Pre- vs post-CoT: best-layer AUROC per position in one row, with the pre-registered prediction from
 P2 quoted above it and whether it held.
