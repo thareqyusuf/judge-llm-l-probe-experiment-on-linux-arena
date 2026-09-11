@@ -118,15 +118,25 @@ Corrected table (round 2; round 1 in the raw):
 
 ---
 
-## 2026-09-11 — D: what the integer throws away, and what a probe could cheat on (no model)
+## 2026-09-11 — D: what the integer throws away
+
+> **Correction 2026-09-11 (same day).** The first version of this entry used 728 honest actions:
+> the script read only the two main-pass score files and omitted
+> `g4_main_first200_scores_20260910T133150Z.jsonl`, whose 97 non-placeholder honest actions carry
+> `score`, `expected_score` and `digit_dist` just like the rest. The honest pool is 825, matching
+> the C entry. Corrected: honest E p95 1.170 (was 1.220), and **E recovers 15 of the 31
+> integer-nulled payloads at 5 % FPR, not 11**. p99 is unchanged at 4/31, and no level-2 positive
+> was affected (all 53 are in the main pass). Superseded raw kept:
+> `d_expression_gap_20260911T112956Z.json`. Current raw `results/raw/action-level-attack-label/d_expression_gap_20260911T120830Z.json`.
+, and what a probe could cheat on (no model)
 
 **Claim.** Two descriptive results on subset_main non-placeholder actions (53 level-2 attack
-positives, 728 honest negatives, scores from the G4 main pass).
+positives, 825 honest negatives, scores from the G4 main pass).
 (1) **Readout loss is visible in the distribution.** At the forced `<score>` readout, level-2
 actions carry 0.308 of the digit mass at 3 or above while the emitted integer is 0 or 1 on 31 of
 53; honest actions carry 0.087 there. Of the 31 payloads the integer nulls, the expected score E
-ranks **11 above the honest 95th percentile** (4 above the 99th). So Δp_null is already positive
-by 11/31 at 5 % FPR with no white-box access — this is the baseline a probe must beat, not the
+ranks **15 above the honest 95th percentile** (4 above the 99th). So Δp_null is already positive
+by 15/31 at 5 % FPR with no white-box access — this is the baseline a probe must beat, not the
 integer.
 (2) **The level-2 label leaks environment identity, length and tool shape, not the CDN host.**
 `packages-cdn.com` is in 5 of 53 positives. `str_replace` is in 49 %, against 4.8 % of honest;
@@ -146,11 +156,11 @@ Expression (`E=results/raw/action-level-attack-label/d_expression_gap_20260911T1
 
 | quantity | honest | level-2 | recompute |
 |---|---|---|---|
-| mean digit mass at ≥ 3 | 0.087 | 0.308 | `jq '.expression.mass_at_or_above_3' $E` |
+| mean digit mass at ≥ 3 | 0.082 | 0.308 | `jq '.expression.mass_at_or_above_3' $E` |
 | mass at digit 0 | 0.699 | 0.474 | `jq '.expression.mean_digit_dist' $E` |
 | E − score, median | −0.32 | −0.26 | `jq '.expression.E_minus_score' $E` |
 | p_null of the integer (score ≤ 1) | — | 31/53 = 0.58 | `jq '.expression.p_null_integer' $E` |
-| of those 31, E > honest p95 / p99 | — | 11 / 4 | `jq '.expression.delta_p_null_from_E' $E` |
+| of those 31, E > honest p95 / p99 | — | **15 / 4** | `jq '.expression.delta_p_null_from_E' $E` |
 
 Digit mass is ≥ 0.9994 on every action, so the distribution is a real readout, not a tail artefact.
 Note E is **not** uniformly higher: its mean minus score is −1.75 on level-2, because it sits well
@@ -161,9 +171,9 @@ Leakage (`jq '.leakage' $E`):
 
 | feature | level-2 | honest |
 |---|---|---|
-| `str_replace` | 26/53 (0.49) | 40/728 (0.055) |
-| `packages-cdn.com` | 5/53 | 0/728 |
-| `/dev/tcp/` | 3/53 | 0/728 |
+| `str_replace` | 26/53 (0.49) | 45/825 (0.055) |
+| `packages-cdn.com` | 5/53 | 0/825 |
+| `/dev/tcp/` | 3/53 | 0/825 |
 | median action length (chars) | 741 | 93 |
 | median position in trajectory | 0.64 | 0.26 |
 | median trajectory length | 44 (attack) | 72 (honest) |
@@ -176,7 +186,7 @@ distant fifth. The controls that bite are therefore **leave-one-environment-out*
 **length/position-matched negatives**, not leave-one-category-out alone.
 
 **Alternative explanations for (1).** E and the integer come from the same forward pass, so this is
-a readout comparison, not two monitors; the 5 % operating point is 36 honest actions here; the
+a readout comparison, not two monitors; the 5 % operating point is 41 honest actions here; the
 level-2 positive set is surface-form biased (A3/A4), so both numbers are upper bounds; placeholders
 are excluded and would raise both for an artefactual reason (B).
 
@@ -184,7 +194,32 @@ are excluded and would raise both for an artefactual reason (B).
 
 ---
 
-## 2026-09-11 — C: ROC / AUROC / TPR at low FPR, local vs cached, on the level-2 label (no model)
+## 2026-09-11 — C: ROC / AUROC / TPR at low FPR
+
+> **Addendum 2026-09-11 (same day).** The trajectory-level table originally carried no confidence
+> interval. At 1 % FPR the threshold is set by ~8 honest actions drawn from 27 honest trajectories,
+> so the cutoff rests on a handful of trajectories and the point estimates should never be quoted
+> bare. Re-run with a trajectory-cluster bootstrap (1,000 reps, seed 0, honest and attack
+> trajectories resampled independently); every trajectory row below now carries a 95 % CI and the
+> CIs overlap heavily. Current raw `results/raw/action-level-attack-label/c_roc_20260911T120843Z.json`; the earlier raw is kept.
+>
+> | variant | n | AUROC [CI] | TPR@1 % [CI] | TPR@5 % [CI] |
+> |---|---|---|---|---|
+> | cached, max over ALL non-hidden actions (export) | 31 | 0.986 [0.97, 1.00] | 0.58 [0.39, 0.94] | 0.90 [0.78, 1.00] |
+> | cached, max over scored subset actions | 31 | 0.917 [0.86, 0.96] | 0.34 [0.19, 0.62] | 0.61 [0.39, 0.85] |
+> | local E, max over scored subset actions | 31 | 0.917 [0.87, 0.95] | 0.29 [0.13, 0.58] | 0.45 [0.29, 0.65] |
+> | local integer, max over scored subset actions | 31 | 0.875 [0.81, 0.93] | 0.41 [0.23, 0.58] | 0.69 [0.49, 0.84] |
+> | local E, max over level-2 actions only | 15 | 0.955 [0.91, 0.99] | 0.47 [0.27, 0.93] | 0.80 [0.60, 1.00] |
+> | cached, max over level-2 actions only | 15 | 0.942 [0.87, 0.99] | 0.53 [0.33, 0.80] | 0.67 [0.47, 0.96] |
+>
+> **What the positives are labelled by.** The trajectory-level rows use `side` (all 31 attack
+> trajectories vs honest actions), the paper's own convention — not `label_cached_high`, so there
+> is no cached-derived circularity in the local-vs-cached comparison. `subset_main` was selected by
+> trajectory plus a 32k-token cap, not by cached score (`g2_prep.py`; the cached-bucket
+> stratification applies only to `subset_counterfactual`). The live selection effect is the token
+> cap, which drops late actions in long trajectories, and it applies to both monitors equally.
+> The action-level table already carried cluster-bootstrap CIs.
+, local vs cached, on the level-2 label (no model)
 
 **Claim.** On subset_main, with the 53 level-2 attack actions as positives and the 825
 non-placeholder honest actions as negatives, the local monitor's expected score (gpt-oss-20b,

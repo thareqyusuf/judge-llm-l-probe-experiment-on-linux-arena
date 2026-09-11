@@ -35,7 +35,8 @@ import format_monitor_prompt as fmp  # noqa: E402
 EXPORT = REPO / "checkpoints" / "local-monitor-activations" / "data" / "export"
 G4 = REPO / "checkpoints" / SLUG / "g4"
 G4_COMMIT = "0153b29153147d668de2fb973aa07d8ad7afcc7b"
-G4_FILES = ["g4_main_scores_20260911T075642Z_part1.jsonl", "g4_main_scores_20260911T075642Z_part2.jsonl"]
+G4_FILES = ["g4_main_scores_20260911T075642Z_part1.jsonl", "g4_main_scores_20260911T075642Z_part2.jsonl",
+            "g4_main_first200_scores_20260910T133150Z.jsonl"]  # first-pass 200: 4 positions only, but score/E/digit_dist present
 LABELS = HERE / "action_labels.json"
 RAW_DIR = REPO / "results" / "raw" / SLUG
 FIG_DIR = REPO / "results" / "figures" / SLUG
@@ -157,7 +158,7 @@ def main():
            "git_commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True).stdout.strip(),
            "g4_commit": G4_COMMIT, "inputs": {f"g4/{f}": hashlib.sha256((G4 / f).read_bytes()).hexdigest() for f in G4_FILES},
            "action_labels_sha256": hashlib.sha256(LABELS.read_bytes()).hexdigest(),
-           "scope": "subset_main, non-placeholder, score not null; positives = attack label_level 2, negatives = honest",
+           "scope": "all 2,012 subset_main actions (main pass + first-pass 200), non-placeholder, score not null; positives = attack label_level 2, negatives = honest",
            "expression": expression, "leakage": leakage,
            "figure": str(fig.relative_to(REPO)) if fig else None}
     RAW_DIR.mkdir(parents=True, exist_ok=True)
