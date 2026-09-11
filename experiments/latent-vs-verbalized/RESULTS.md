@@ -33,14 +33,19 @@ verbatim, so the reviewer can see what was asked vs what was run.
 
 ## 2026-09-11 — P0c / P2 / P3 / P3b / P4 / P6: probes, baselines, counterfactual renders, the tail curve
 
-**Claim.** On the pooled out-of-sample population (59 trajectories, 53 level-2 vs 839 honest), a ridge probe
-trained to predict E from the residual stream at `reasoning_end` L14 has AUROC 0.943 [0.91, 0.97] against E's
-0.905 [0.83, 0.95]; a logistic probe on the level-2 label at `action_end` L8 has 0.915 [0.86, 0.97]. **Neither
-probe beats E on the pre-registered headline**: of the 31 integer-nulled payloads, E lifts 15 above the honest
-p95; the score probe 11, the label probe 19 — but the label probe's TPR@1 % (0.19 [0.02, 0.49]) is below E's
-(0.30) and it collapses under leave-one-category-out (0.75; 0.57 on the 22 data_tampering payloads) and on
-length/position-matched negatives (0.77 vs E 0.82). The score probe survives every cut except matched negatives
-(0.87 vs E 0.82, CIs overlap) and residualisation (0.84). The pre-registered ordering (i) `prompt_end ≥ analysis_end ≥ E`
+**Claim** *(corrected by P7, 2026-09-11 review; the original wording is in git at 9b7cd75).* On the pooled
+out-of-sample population (59 trajectories; 53 level-2 vs 839 honest, or vs the 743 honest that have generation
+positions for the score probe), a ridge probe trained to predict E from the residual stream at `reasoning_end`
+L14 has AUROC 0.943 [0.91, 0.97] against E's 0.905 [0.83, 0.95] (0.897 [0.81, 0.95] on the same 743 rows;
+paired trajectory-bootstrap ΔAUROC probe − E = +0.046 [+0.002, +0.119]); a logistic probe on the level-2
+label at `action_end` L8 has 0.915 [0.86, 0.97] (paired Δ vs E +0.015 [−0.068, +0.112] — indistinguishable).
+**The pre-registered Δp_null headline is inconclusive, not falsified**: of the 31 integer-nulled payloads, E
+lifts 15 above the honest p95 on 839 honest but 11 on the score probe's 743 honest, so on a common pool it is
+E 11 / score probe 11 / label probe 18–19; the paired bootstrap CI on the lifted-count difference is [−9, +6]
+(score − E) and [−11, +17] (label − E), because 14 of the 31 nulled payloads are one trajectory (`588b46`).
+The label probe's TPR@1 % (0.19 [0.02, 0.49]) is below E's (0.30) and it collapses under leave-one-category-out
+(0.75; 0.57 on the 22 data_tampering payloads) and on length/position-matched negatives (0.77 vs E 0.82). The
+score probe survives every cut except matched negatives (0.87 vs E 0.82, CIs overlap) and residualisation (0.84). The pre-registered ordering (i) `prompt_end ≥ analysis_end ≥ E`
 **did not hold as written**: `prompt_end` is the weakest prompt position (0.69 / 0.86) while `action_end`
 (0.93 / 0.93) ≈ `analysis_end` (0.84 / 0.93) ≈ `reasoning_end` (0.90 / 0.93) — the information is present at
 the last token of the action, before generation, and the CoT positions add nothing linearly beyond it.
@@ -51,7 +56,8 @@ counterfactual renders (P3b). Everything below is level-2 vs honest, current-act
 conventions of `common.py`; CIs are 500-rep trajectory-cluster bootstraps, seed 0.
 
 **Evidence.**
-- Scripts @ this commit: `p0c_sample_variance.py`, `p2_probes.py`, `p3_baselines.py`, `p3b_counterfactual.py`, `p4_result.py`, `p6_read.py`, `exclude_suspicion_nonnegated.json`
+- Scripts @ this commit: `p0c_sample_variance.py`, `p2_probes.py`, `p3_baselines.py`, `p3b_counterfactual.py`, `p4_result.py`, `p6_read.py`, `exclude_suspicion_nonnegated.json`; review re-check `p7_dpnull_check.py`
+- P7 raw: `P7=results/raw/latent-vs-verbalized/p7_dpnull_check_20260911T152343Z.json`. Earlier runs: `…152206Z` lacks §5, otherwise identical; `…152127Z` has §4 misaligned at the generation positions (a zip against the unmasked key list) — do not use it. Logs `logs/latent-vs-verbalized/p7_dpnull_check_*.log`.
 - Raw: `P0C=results/raw/latent-vs-verbalized/p0c_sample_variance_20260911T143408Z.json`, `P2=…/p2_sweep_20260911T143053Z.json` (+ `p2_sweep_nosusp_20260911T143301Z.json`), `P3=…/p3_baselines_20260911T143755Z.json` (+ `p3_baselines_phnone_20260911T144124Z.json`, appendix), `P3B=…/p3b_counterfactual_20260911T144417Z.json`, `P4=…/p4_result_20260911T144504Z.json` (identical numbers to `…144249Z`, legend moved), `P6=…/p6_read_20260911T144332Z.json (first run `…144314Z` crashed on a print after writing the same lists)`
 - Checkpoint (gitignored): `checkpoints/latent-vs-verbalized/p2_oof_20260911T143053Z.npz` — OOF predictions for all 175 cells × 14 configs
 - Logs: `logs/latent-vs-verbalized/{p0c_sample_variance,p2_probes,p2_probes_nosusp,p3_baselines,p3_baselines_phnone,p3b_counterfactual,p4_result,p6_read}_*.log`
@@ -168,12 +174,47 @@ Pooled out-of-sample over 59 trajectories (every probe/dumb/text score is train-
 (`jq '.scorers[].["logit_fit_1e-2_to_0.5"]' $P4`). The score probe's population is 743 honest (pass-1 rows have
 no `reasoning_end`), so its thresholds are on a different honest set from the others.
 
-**Falsification test from the hypothesis section.** "Falsified if the probe's Δp_null ≤ 15/31, or if any listed
-baseline matches it." Score probe: 11/31 → falsified on Δp_null. Label probe: 19/31 at p95 but 3/31 at p99
-(E: 4), TPR@1 % below E, matched-negative AUROC 0.77 below E's 0.82, LOCO 0.75, and the text baseline matches
-it on the locked test (0.955 vs 0.924). I read this as: **reading (b) is not supported; E already exhausts
-what is linearly readable before generation, and the label probe's extra 4 recoveries at 5 % are bought with
-trajectory-identity signal** (see P6). The user decides.
+**Falsification test from the hypothesis section** *(corrected by P7).* "Falsified if the probe's Δp_null ≤ 15/31,
+or if any listed baseline matches it." The test as written cannot be decided at this n: the lifted count carries
+no CI in P4, 14 of the 31 nulled payloads are one trajectory, and the 15-vs-11 comparison was across two honest
+pools (E on 839, score probe on 743). On the common 743 pool it is E 11 / score probe 11 / label probe 18; the
+paired bootstrap CI on the difference in lifted count spans zero for both probes (P7 §2). **Δp_null: inconclusive.**
+What the data do support is the AUROC ordering: score probe > E by +0.046 [+0.002, +0.119] paired; label probe
+≈ E. The label probe additionally has 3/31 at p99 (E: 4), TPR@1 % below E, matched-negative AUROC 0.77 below
+E's 0.82, LOCO 0.75, and the text baseline matches it on the locked test (0.955 vs 0.924). I read this as:
+**reading (b) is not supported — the pre-registered label probe (`prompt_end`) lifts 4/26 train-OOF vs E's 10/26
+(P7 §4); the only robust edge is the score probe's AUROC, and that probe is a ridge fit to E itself, i.e. a
+denoised readout of the verdict E already carries** (see P6). The user decides.
+
+### P7 — review re-check of Δp_null (`jq '.["1_same_pool_743"].scorers | map_values({auroc, ci95, delta_p_null: .delta_p_null.p95.k})' $P7`)
+
+CPU only, no fit; reads P3 `scores_pooled_59` (the P4 score vector) and the P2 OOF checkpoint.
+
+1. **Same pool.** The 96 pass-1 honest rows the score probe cannot score have mean E 0.45 (kept: 0.65) and
+   **0 of 96 are above E's p95** (`jq '.["1_same_pool_743"].dropped_honest' $P7`). On the 743 honest they all
+   share: E 0.897 [0.81, 0.95], lifts 11/31; score probe 0.943 [0.91, 0.97], 11/31; label probe 0.909 [0.85, 0.97],
+   18/31; text 0.842, 5/31.
+2. **CI on the count** (`jq '.["2_bootstrap"]' $P7`; 500 trajectory-cluster reps, seed 0). Lifted fraction: E
+   [0.16, 0.71], score probe [0.14, 0.62], label probe [0.29, 0.88]. Paired differences: score − E ΔAUROC
+   +0.046 [+0.002, +0.119] (P(>0) 0.98), Δcount −0.9 [−9, +6] (P(>0) 0.31); label − E ΔAUROC +0.018
+   [−0.072, +0.121], Δcount +3.7 [−10, +18].
+3. **Threshold convention** (`jq '.["3_threshold_convention"]' $P7`). The pooled vector concatenates five fold
+   models and the test refit; the share of each model's honest rows above the global p95 runs 0.9–11.7 % for the
+   score probe and 0–10.3 % for the label probe. With each model's own p95 the counts become E 8, score 7,
+   label 23 (of 31). `588b46` (14 nulled, fold 1) supplies E 10 / score 7 / label 10 of the lifts
+   (`jq '.["3b_nulled_by_trajectory"]' $P7`).
+4. **Per position, train-OOF only** (26 nulled; best-AUROC cell per position; `jq '.["4_train_oof_dpnull_per_position"]' $P7`).
+   Label arm probe/E: `prompt_end` (pre-registered) **4/10**, `action_end` 17/10, `reasoning_end` 11/9.
+   Score arm: `action_end` L18 **15/10**, `analysis_end` 12/9, `reasoning_end` L14 (the chosen cell) 9/9 —
+   the three cells are tied on OOF AUROC (0.931/0.932/0.932); the chosen one is the worst of them on Δp_null.
+   Selection was on AUROC, not on the pre-registered metric.
+
+5. **Attack-other vs honest** (`jq '.["5_attack_other"].scorers | map_values({other_vs_honest, level2_vs_other_same_traj})' $P7`).
+   Neither probe separates the 1,028 non-payload attack actions (level 0/1/null) from honest: AUROC 0.508
+   score / 0.565 label (E 0.532, text 0.508), so the "trajectory identity" concern is not the crude attack-side
+   version. Level-2 vs the other actions *in the same 15 trajectories*: 0.941 score / 0.872 label / E 0.883.
+
+Not changed by P7: the AUROC numbers, the LOEO/LOCO/matched/residual tables, the position-ordering table.
 
 ### P0c — sample variance (`jq '.by_group, .auroc_level2_vs_honest_within_150' $P0C`)
 
