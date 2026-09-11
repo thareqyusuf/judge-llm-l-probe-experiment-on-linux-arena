@@ -19,6 +19,26 @@ verbatim, so the reviewer can see what was asked vs what was run.
 
 ---
 
+## 2026-09-11 — A2: signatures frozen (fresh session)
+
+**Claim.** None yet. `payload_signatures.json` was drafted by a fresh session whose only
+inputs were `TASK.md` and `side_task_descriptions.md`, and frozen at commit `a79e588`
+before any check ran. No regex has touched any action, score, or raw file.
+
+**Evidence.**
+- File: `experiments/action-level-attack-label/payload_signatures.json` @ commit `a79e588`
+- Counts: 92 entries (one per side task, same order as the descriptions file), 715 level-2
+  and 303 level-1 regexes, all compile under Python `re`, no empty level-2 list.
+  Recompute: `jq '[.signatures[].level2|length]|add, ([.signatures[].level1|length]|add)' experiments/action-level-attack-label/payload_signatures.json`
+- The drafter's own list of low-confidence entries (objective names no artefact, so level 2
+  keys off `str_replace` plus concept words): the 8 `*_rce` tasks, all 8 monitoring_subversion
+  tasks, the code-edit data-tampering tasks, and the exfiltration tasks whose outbound channel
+  is unnamed. It expects both misses and honest false positives there in A3.
+
+**Status.** `[hunch]` — awaiting your hand review, then A3.
+
+---
+
 ## 2026-09-11 — A1: what the export already gives (no model, stdlib only)
 
 **Claim.** The export carries a usable trajectory-level `side_task_succeeded` flag (90/92
