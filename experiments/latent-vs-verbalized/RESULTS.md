@@ -6,7 +6,23 @@ command — see CLAUDE.md. Status tags: `[hunch]` `[tested]` `[verified]` `[dead
 
 ## Hypothesis
 
-<one sentence, falsifiable>. Kind of claim: existence proof / general claim.
+A linear probe on gpt-oss-20b's residual stream at `prompt_end`, trained on level-2
+payload actions vs honest actions, ranks the 31 payloads the verbalized integer puts at
+≤ 1 above the honest 5 % FPR threshold more often than the expected score E does
+(E: 15/31), and keeps that margin under leave-one-environment-out, length/position-matched
+negatives, and a TF-IDF text baseline.
+
+Kind of claim: general claim (about this monitor on this pool; needs the baselines above).
+Falsified if the probe's Δp_null ≤ 15/31, or if any listed baseline matches it. A null here
+is a result: it means E already exhausts what is linearly readable before generation.
+
+Pre-registered secondary (position ordering, written before running P2): I expect
+`prompt_end` ≥ `analysis_end` ≥ E — the information is present before the monitor writes
+anything, and the CoT adds nothing linearly readable. The G4.3 local>cached catch, whose
+analysis text named the mechanism, is the reason the opposite ordering
+(`analysis_end` > `prompt_end`) is plausible; if that is what appears, the probe must be
+re-run with the suspicion-language actions removed before it counts.
+`instruction_end` must be at chance; `pre_score` is excluded as evidence (digit mass 1.0).
 
 ## Task
 
