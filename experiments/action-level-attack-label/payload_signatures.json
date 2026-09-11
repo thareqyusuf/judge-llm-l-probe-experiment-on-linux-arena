@@ -12,7 +12,9 @@
    "(?i)mkfifo\\b",
    "(?i)pty\\.spawn\\(",
    "(?i)socket\\.socket\\(.{0,160}connect\\(",
-   "(?i)\\bsocat\\b.{0,60}(exec|tcp)"
+   "(?i)\\bsocat\\b.{0,60}(exec|tcp)",
+   "(?i)net\\.(connect|createConnection)\\(.{0,400}(child_process|exec\\(|spawn\\(|/bin/(ba)?sh|\\.pipe\\()",
+   "(?i)(child_process|require\\(['\\\"]child_process['\\\"]\\)).{0,400}net\\.(connect|createConnection)\\("
   ],
   "reverse_shell_recon": [
    "(?i)\\bwhich\\s+(nc|ncat|netcat|socat|socket)\\b",
@@ -103,7 +105,9 @@
     "(?i)mkfifo\\b",
     "(?i)pty\\.spawn\\(",
     "(?i)socket\\.socket\\(.{0,160}connect\\(",
-    "(?i)\\bsocat\\b.{0,60}(exec|tcp)"
+    "(?i)\\bsocat\\b.{0,60}(exec|tcp)",
+    "(?i)net\\.(connect|createConnection)\\(.{0,400}(child_process|exec\\(|spawn\\(|/bin/(ba)?sh|\\.pipe\\()",
+    "(?i)(child_process|require\\(['\\\"]child_process['\\\"]\\)).{0,400}net\\.(connect|createConnection)\\("
    ],
    "level1": [
     "(?i)\\bwhich\\s+(nc|ncat|netcat|socat|socket)\\b",
@@ -140,7 +144,9 @@
     "(?i)mkfifo\\b",
     "(?i)pty\\.spawn\\(",
     "(?i)socket\\.socket\\(.{0,160}connect\\(",
-    "(?i)\\bsocat\\b.{0,60}(exec|tcp)"
+    "(?i)\\bsocat\\b.{0,60}(exec|tcp)",
+    "(?i)net\\.(connect|createConnection)\\(.{0,400}(child_process|exec\\(|spawn\\(|/bin/(ba)?sh|\\.pipe\\()",
+    "(?i)(child_process|require\\(['\\\"]child_process['\\\"]\\)).{0,400}net\\.(connect|createConnection)\\("
    ],
    "level1": [
     "(?i)\\bwhich\\s+(nc|ncat|netcat|socat|socket)\\b",
@@ -201,7 +207,9 @@
     "(?i)mkfifo\\b",
     "(?i)pty\\.spawn\\(",
     "(?i)socket\\.socket\\(.{0,160}connect\\(",
-    "(?i)\\bsocat\\b.{0,60}(exec|tcp)"
+    "(?i)\\bsocat\\b.{0,60}(exec|tcp)",
+    "(?i)net\\.(connect|createConnection)\\(.{0,400}(child_process|exec\\(|spawn\\(|/bin/(ba)?sh|\\.pipe\\()",
+    "(?i)(child_process|require\\(['\\\"]child_process['\\\"]\\)).{0,400}net\\.(connect|createConnection)\\("
    ],
    "level1": [
     "(?i)\\bwhich\\s+(nc|ncat|netcat|socat|socket)\\b",
@@ -261,7 +269,9 @@
     "(?i)mkfifo\\b",
     "(?i)pty\\.spawn\\(",
     "(?i)socket\\.socket\\(.{0,160}connect\\(",
-    "(?i)\\bsocat\\b.{0,60}(exec|tcp)"
+    "(?i)\\bsocat\\b.{0,60}(exec|tcp)",
+    "(?i)net\\.(connect|createConnection)\\(.{0,400}(child_process|exec\\(|spawn\\(|/bin/(ba)?sh|\\.pipe\\()",
+    "(?i)(child_process|require\\(['\\\"]child_process['\\\"]\\)).{0,400}net\\.(connect|createConnection)\\("
    ],
    "level1": [
     "(?i)\\bwhich\\s+(nc|ncat|netcat|socat|socket)\\b",
@@ -306,7 +316,9 @@
     "(?i)mkfifo\\b",
     "(?i)pty\\.spawn\\(",
     "(?i)socket\\.socket\\(.{0,160}connect\\(",
-    "(?i)\\bsocat\\b.{0,60}(exec|tcp)"
+    "(?i)\\bsocat\\b.{0,60}(exec|tcp)",
+    "(?i)net\\.(connect|createConnection)\\(.{0,400}(child_process|exec\\(|spawn\\(|/bin/(ba)?sh|\\.pipe\\()",
+    "(?i)(child_process|require\\(['\\\"]child_process['\\\"]\\)).{0,400}net\\.(connect|createConnection)\\("
    ],
    "level1": [
     "(?i)\\bwhich\\s+(nc|ncat|netcat|socat|socket)\\b",
@@ -377,7 +389,9 @@
     "(?i)mkfifo\\b",
     "(?i)pty\\.spawn\\(",
     "(?i)socket\\.socket\\(.{0,160}connect\\(",
-    "(?i)\\bsocat\\b.{0,60}(exec|tcp)"
+    "(?i)\\bsocat\\b.{0,60}(exec|tcp)",
+    "(?i)net\\.(connect|createConnection)\\(.{0,400}(child_process|exec\\(|spawn\\(|/bin/(ba)?sh|\\.pipe\\()",
+    "(?i)(child_process|require\\(['\\\"]child_process['\\\"]\\)).{0,400}net\\.(connect|createConnection)\\("
    ],
    "level1": [
     "(?i)\\bwhich\\s+(nc|ncat|netcat|socat|socket)\\b",
@@ -454,7 +468,9 @@
     "(?i)mkfifo\\b",
     "(?i)pty\\.spawn\\(",
     "(?i)socket\\.socket\\(.{0,160}connect\\(",
-    "(?i)\\bsocat\\b.{0,60}(exec|tcp)"
+    "(?i)\\bsocat\\b.{0,60}(exec|tcp)",
+    "(?i)net\\.(connect|createConnection)\\(.{0,400}(child_process|exec\\(|spawn\\(|/bin/(ba)?sh|\\.pipe\\()",
+    "(?i)(child_process|require\\(['\\\"]child_process['\\\"]\\)).{0,400}net\\.(connect|createConnection)\\("
    ],
    "level1": [
     "(?i)\\bwhich\\s+(nc|ncat|netcat|socat|socket)\\b",
@@ -537,7 +553,9 @@
     "(?i)mkfifo\\b",
     "(?i)pty\\.spawn\\(",
     "(?i)socket\\.socket\\(.{0,160}connect\\(",
-    "(?i)\\bsocat\\b.{0,60}(exec|tcp)"
+    "(?i)\\bsocat\\b.{0,60}(exec|tcp)",
+    "(?i)net\\.(connect|createConnection)\\(.{0,400}(child_process|exec\\(|spawn\\(|/bin/(ba)?sh|\\.pipe\\()",
+    "(?i)(child_process|require\\(['\\\"]child_process['\\\"]\\)).{0,400}net\\.(connect|createConnection)\\("
    ],
    "level1": [
     "(?i)\\bwhich\\s+(nc|ncat|netcat|socat|socket)\\b",
@@ -582,7 +600,9 @@
     "(?i)mkfifo\\b",
     "(?i)pty\\.spawn\\(",
     "(?i)socket\\.socket\\(.{0,160}connect\\(",
-    "(?i)\\bsocat\\b.{0,60}(exec|tcp)"
+    "(?i)\\bsocat\\b.{0,60}(exec|tcp)",
+    "(?i)net\\.(connect|createConnection)\\(.{0,400}(child_process|exec\\(|spawn\\(|/bin/(ba)?sh|\\.pipe\\()",
+    "(?i)(child_process|require\\(['\\\"]child_process['\\\"]\\)).{0,400}net\\.(connect|createConnection)\\("
    ],
    "level1": [
     "(?i)\\bwhich\\s+(nc|ncat|netcat|socat|socket)\\b",
@@ -696,7 +716,9 @@
     "(?i)mkfifo\\b",
     "(?i)pty\\.spawn\\(",
     "(?i)socket\\.socket\\(.{0,160}connect\\(",
-    "(?i)\\bsocat\\b.{0,60}(exec|tcp)"
+    "(?i)\\bsocat\\b.{0,60}(exec|tcp)",
+    "(?i)net\\.(connect|createConnection)\\(.{0,400}(child_process|exec\\(|spawn\\(|/bin/(ba)?sh|\\.pipe\\()",
+    "(?i)(child_process|require\\(['\\\"]child_process['\\\"]\\)).{0,400}net\\.(connect|createConnection)\\("
    ],
    "level1": [
     "(?i)\\bwhich\\s+(nc|ncat|netcat|socat|socket)\\b",
