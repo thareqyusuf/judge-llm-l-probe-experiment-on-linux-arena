@@ -52,7 +52,7 @@ conventions of `common.py`; CIs are 500-rep trajectory-cluster bootstraps, seed 
 
 **Evidence.**
 - Scripts @ this commit: `p0c_sample_variance.py`, `p2_probes.py`, `p3_baselines.py`, `p3b_counterfactual.py`, `p4_result.py`, `p6_read.py`, `exclude_suspicion_nonnegated.json`
-- Raw: `P0C=results/raw/latent-vs-verbalized/p0c_sample_variance_20260911T143408Z.json`, `P2=…/p2_sweep_20260911T143053Z.json` (+ `p2_sweep_nosusp_20260911T143301Z.json`), `P3=…/p3_baselines_20260911T143755Z.json` (+ `p3_baselines_phnone_20260911T144124Z.json`, appendix), `P3B=…/p3b_counterfactual_20260911T144417Z.json`, `P4=…/p4_result_20260911T144504Z.json` (identical numbers to `…144249Z`, legend moved), `P6=…/p6_read_20260911T144344Z.json`
+- Raw: `P0C=results/raw/latent-vs-verbalized/p0c_sample_variance_20260911T143408Z.json`, `P2=…/p2_sweep_20260911T143053Z.json` (+ `p2_sweep_nosusp_20260911T143301Z.json`), `P3=…/p3_baselines_20260911T143755Z.json` (+ `p3_baselines_phnone_20260911T144124Z.json`, appendix), `P3B=…/p3b_counterfactual_20260911T144417Z.json`, `P4=…/p4_result_20260911T144504Z.json` (identical numbers to `…144249Z`, legend moved), `P6=…/p6_read_20260911T144332Z.json (first run `…144314Z` crashed on a print after writing the same lists)`
 - Checkpoint (gitignored): `checkpoints/latent-vs-verbalized/p2_oof_20260911T143053Z.npz` — OOF predictions for all 175 cells × 14 configs
 - Logs: `logs/latent-vs-verbalized/{p0c_sample_variance,p2_probes,p2_probes_nosusp,p3_baselines,p3_baselines_phnone,p3b_counterfactual,p4_result,p6_read}_*.log`
 - Figures: `results/figures/latent-vs-verbalized/p0c_sample_spread.png`, `p2_sweep_label.png`, `p2_sweep_score.png`, `p3_baselines.png`, `p3_baselines_phnone.png`, `p3b_renders.png`, `p4_tail_curve.png`
