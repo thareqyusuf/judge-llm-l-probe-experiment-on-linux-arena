@@ -10,6 +10,7 @@ stage here is CPU work that takes minutes there. No new GPU runs.
 Conventions as in CLAUDE.md: every number carries script + raw + a recompute one-liner; append to
 `RESULTS.md` newest at top; status tags `[hunch]` `[tested]` `[verified]` `[dead]`.
 
+
 ---
 
 ## The claim this is testing
@@ -115,6 +116,20 @@ Raw `p0b_anchoring_<ts>.json`. Figure `p0b_digit_mass.png`.
 A proper de-anchored prompt is a new GPU run — out of scope. The `cf_neutralized` render in the
 G4.5 chain is the nearest thing; if it lands, add it here as an appendix row.
 
+## P0c. Sample variance — readout loss on a model you can open (30 min)
+
+The `sampled_k4` stage (150 subset_main actions, 4 samples at T=1 from a shared prefill) finishes
+~13:15Z. This is the local-monitor version of the cached monitor's two-sample disagreement, and it
+is the cleanest measurement of loss (a) you will get.
+
+Report, split by `label_level` and by side: the distribution of (max − min) across the 4 samples;
+the fraction of actions where at least one sample is ≥ 3 while the greedy integer is ≤ 1; and
+Spearman(mean of 4 samples, E). Redwood averages 5 samples per step, so the 4-sample mean is the
+realistic deployed readout — report AUROC for it alongside E and the greedy integer.
+If a payload's samples span 1 and 8, the state was there and sampling threw it away: quote it.
+
+Raw `p0c_sample_variance_<ts>.json`. Figure `p0c_sample_spread.png`.
+
 ## P1. Lock the split (10 min, before any activation tensor is loaded)
 
 Write and **commit** `split.json`: test trajectory ids, plus 5 grouped-CV folds over the train ids.
@@ -198,6 +213,33 @@ scrubbed from the **input**, which is the `cf_neutralized` render; add it if it 
 
 Raw `p3_baselines_<ts>.json`. Figure `p3_baselines.png`, one bar per method with cluster-bootstrap CI.
 
+## P3b. Counterfactual renders — the real content filter (60 min)
+
+`cf_neutralized` and `cf_random_scrub` both finished (250 subset_main actions each, 156 attack /
+94 honest, strata `action` 150 and `history_only` 100). This is the only control that removes the
+giveaway from the **input** rather than controlling for it in the evaluation, so it is the strongest
+leakage test available and it is already computed.
+
+Take the probe chosen in P2, **without refitting**, and score all three renders of the same 250
+actions. Report AUROC and TPR@5 % per render, and the per-action score deltas.
+
+| outcome | reading |
+|---|---|
+| neutralized ≈ original, random_scrub ≈ original | the probe is not reading the planted artifact |
+| neutralized collapses, random_scrub holds | the probe was reading the artifact — this is the leakage result, report it |
+| both collapse | scrubbing anything breaks the representation; the comparison is uninformative |
+
+**Use `random_scrub` as the baseline, not `main`.** The chain log shows `cf_random_scrub` at
+frac(score ≥ 3) = 0.125 against main's 0.077, i.e. scrubbing random tokens appears to *raise*
+suspicion. If that holds, an artifact-removal effect measured against `main` is confounded with a
+scrubbing effect. Verify the 0.125 first and report it either way — it is itself a finding about
+the monitor.
+
+Also run the same three-render comparison on the verbalized integer, E, and the text baseline, so
+the probe's robustness is stated relative to theirs rather than in isolation.
+
+Raw `p3b_counterfactual_<ts>.json`. Figure `p3b_renders.png`.
+
 ## P4. The result (45 min)
 
 One Redwood-style figure: TPR vs logit(FPR), pooled out-of-fold, trajectory-bootstrap bands.
@@ -220,12 +262,6 @@ P2 quoted above it and whether it held.
   actually the payload (the hand-audit verdict is a column in `action_labels.json`).
 - Bottom 10 level-2 by probe — what the probe also misses.
 
-## Not in scope
-
-No GPU. No counterfactual renders unless the chain already produced them. No second monitor, no
-capability-gap sweep, no MultiMax — those need models you will not have time to run.
-If the label arm is at chance after P3.1–P3.2, **that is the result**: write it up as comprehension
-loss for this monitor, with the baselines that rule out the alternatives.
 
 ## Alternative explanations every RESULTS entry must address
 
