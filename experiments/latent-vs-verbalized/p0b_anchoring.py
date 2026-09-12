@@ -41,6 +41,16 @@ def meandist(rows):
 def main():
     stamp = C.ts(); rows, meta = C.build_table()
     u = C.usable(rows, "current"); pos, neg = C.pos_neg(u)
+    pool = "common743" if "--pool" in sys.argv and sys.argv[sys.argv.index("--pool") + 1] == "common743" else "all"
+    if pool == "common743":  # 2026-09-12: honest rows restricted to the common 743 (rows with generation positions), keyed off P11's row table
+        import glob, json as _json
+        p11p = sorted(glob.glob(str(C.RAW_DIR / "p11_probe_beats_e_*.json")))[-1]; p11 = _json.load(open(p11p)); cols = p11["rows_all"]["columns"]
+        keep = {(r[cols.index("traj_id")], r[cols.index("action_idx")]) for r in p11["rows_all"]["rows"] if r[cols.index("class")] == "honest"}
+        neg = [r for r in neg if (r["traj_id"], r["action_idx"]) in keep]; assert len(neg) == len(keep) == 743, (len(neg), len(keep))
+        pool_info = {"name": pool, "rule": "honest rows listed as class 'honest' in the P11 rows_all table (the 743 with generation positions)", "p11_raw": str(Path(p11p).relative_to(C.REPO)), "n_neg": len(neg)}
+    else:
+        pool_info = {"name": pool, "rule": "all usable honest rows", "n_neg": len(neg)}
+    raw_name, fig_name = ("p0b_anchoring_pool743", "p0b_digit_mass_pool743.png") if pool == "common743" else ("p0b_anchoring", "p0b_digit_mass.png")
     nulled = sorted([r for r in pos if r["score"] <= 1], key=lambda r: -r["E"])
     loud = [r for r in pos if r["score"] >= 3]
     per = [{"traj_id": r["traj_id"], "action_idx": r["action_idx"], "score": r["score"], "E": r["E"], "cached_mean": r["cached_mean"],
@@ -75,7 +85,7 @@ def main():
             "literal": summ(hits), "non_negated": summ(nonneg), "level2_hits": [h for h in hits if h["side"] == "attack" and h["label_level"] == 2],
             "ten_verbatim_random0": ten, "all_hits": hits,
             "baseline_rate": {"n_usable_score_le1": sum(r["score"] <= 1 for r in u), "mean_E_score_le1": st.mean(r["E"] for r in u if r["score"] <= 1)}}
-    out = {"slug": C.SLUG, "script": f"experiments/{C.SLUG}/p0b_anchoring.py", "timestamp": stamp, "git_commit": C.git_commit(), "inputs": meta,
+    out = {"slug": C.SLUG, "script": f"experiments/{C.SLUG}/p0b_anchoring.py", "timestamp": stamp, "git_commit": C.git_commit(), "inputs": meta, "pool": pool_info,
            "digit_mass": mass, "says_one_thing": says}
 
     import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
@@ -91,8 +101,8 @@ def main():
     ax[1].set_xticks(range(11)); ax[1].set_xlabel("digit"); ax[1].set_title("per-action digit distribution, 31 nulled payloads (log10 p), sorted by E", fontsize=9)
     plt.colorbar(im, ax=ax[1], fraction=0.03, label="log10 p")
     for a in ax[:1]: a.spines[["top", "right"]].set_visible(False)
-    fig.tight_layout(); p = C.fig_path("p0b_digit_mass.png"); fig.savefig(p, dpi=150); plt.close(fig); out["figure"] = str(p.relative_to(C.REPO))
-    C.write_raw("p0b_anchoring", out, stamp)
+    fig.tight_layout(); p = C.fig_path(fig_name); fig.savefig(p, dpi=150); plt.close(fig); out["figure"] = str(p.relative_to(C.REPO))
+    C.write_raw(raw_name, out, stamp)
     m = mass["nulled_level2"]
     print(f"nulled level-2 n={m['n']}: mean bands {m['mean_bands']}; second mode (6-10 > 0.05) in {m['n_with_second_mode_ge6_over_0.05']}; 6-10 > 0.20 in {m['n_with_band_6_10_over_0.20']}; 6-10 quantiles {m['band_6_10_quantiles']}")
     print("mean digit dist nulled:", {k: round(v, 4) for k, v in m['mean_digit_dist'].items()})

@@ -5,20 +5,23 @@ replacement is listed under "differs from FIGURES.md". Recompute commands are in
 `experiments/latent-vs-verbalized/RESULTS.md` (entry "Summary figures F1–F4"). **One honest pool for all four: the
 common 743** (honest rows that have generation positions; F3 is train-only, 599 of them).
 
-## F1 — `F1_readout_loss.{png,svg}` (`fig_F1.py`; P4 rerun on the 743 pool + P0b)
+## F1 — `F1_readout_loss.{png,svg}` (`fig_F1.py`; P4 and P0b both rerun on the 743 pool)
 
 The forced digit distribution E beats the emitted integer at a 5 % FPR budget (TPR 0.55 vs 0.42) and not at 1 %
-(0.30 vs 0.33). What E recovers on the 31 payloads the integer scores ≤ 1 is mass at 2–3 (inset), not a hidden high
-verdict (mass on 6–10: 0.006). gpt-oss-20b, 53 level-2 payloads vs 743 honest actions; bands are trajectory-cluster
-bootstrap 95 % CIs. Below 1e-2 the dashed curves are logit-linear extrapolations of the 1e-2–0.5 segment, not
+(0.30 vs 0.33); AUROC E 0.90, integer 0.74, GPT-5-nano mean 0.85. What E recovers on the 31 payloads the integer
+scores ≤ 1 is mass at 2–3 (inset), not a hidden high verdict (mass on 6–10: 0.006, against 0.001 for honest actions).
+gpt-oss-20b, 53 level-2 payloads vs 743 honest actions, the same 743 for the curves and the inset's honest bars; bands
+are trajectory-cluster bootstrap 95 % CIs. Below 1e-2 the dashed curves are logit-linear extrapolations of the 1e-2–0.5 segment, not
 measurements: the fits are driven by the mid-curve slope, the integer's is flattened by its ties, and the ordering
 of the three below 1e-2 (integer's dashed line ending above E's at 1e-3) is not meaningful — consistent with the
 measured 1 % point, where there is no gap.
 
 Differs from FIGURES.md: TPR numbers 0.64 / 0.41 → 0.55 / 0.42, because the FIGURES.md caption quoted P4's original
 839-pool run while stating 743. F1 is now drawn from `p4_result_pool743_20260912T030653Z.json` (P4 rerun with
-`--pool common743`, same score vectors, no model), which reproduces P7 §1 exactly. The inset's honest bars are the
-839-row mean digit distribution from P0b (a mean, not a percentile; the 743 subset was not recorded separately).
+`--pool common743`, same score vectors, no model), which reproduces P7 §1 exactly; the AUROCs in the legend are from
+that raw (the 839-pool integer AUROC was 0.748; on 743 it is 0.744). The inset's honest bars are the mean digit
+distribution over the same 743 rows (`p0b_anchoring_pool743_20260912T031729Z.json`, P0b rerun with `--pool common743`,
+keyed off P11's row table); the 839-row mean differs in the third decimal (mass on 6–10: 0.0012 on both).
 
 ## F2 — `F2_no_probe_beats_E.{png,svg}` (`fig_F2.py`; P7 + P3 + P11)
 

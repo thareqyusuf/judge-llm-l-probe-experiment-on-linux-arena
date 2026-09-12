@@ -38,14 +38,16 @@ per figure, `experiments/latent-vs-verbalized/fig_F{1,2,3,4}.py` (+ `fig_common.
 only `results/raw/latent-vs-verbalized/*.json` and printing every number it draws to `logs/latent-vs-verbalized/fig_F*.log`.
 Outputs: `results/figures/latent-vs-verbalized/summary/F*.{png,svg}` (200 dpi, 6.5 in wide; F3 4.5 in). Captions, with every
 place they differ from the FIGURES.md text, in `results/figures/latent-vs-verbalized/summary/CAPTIONS.md`. **All four share
-the common 743-honest pool.** The only new raw is `p4_result_pool743_20260912T030653Z.json`: `p4_result.py --pool common743`
-(added 2026-09-12; default behaviour unchanged) restricts P3's `scores_pooled_59` rows to those with generation positions —
-the P7 §1 pool — and recomputes the ROC / bands / logit fit on the same score vectors, no model. Its scalars reproduce P7 §1
-to the digit (asserted in `fig_F1.py`); log `logs/latent-vs-verbalized/p4_result_pool743.log`.
+the common 743-honest pool.** Two new raws, both re-poolings of existing per-row data, no model: `p4_result_pool743_20260912T030653Z.json`
+(`p4_result.py --pool common743`, added 2026-09-12, default behaviour unchanged) restricts P3's `scores_pooled_59` rows to
+those with generation positions — the P7 §1 pool — and recomputes the ROC / bands / logit fit on the same score vectors;
+its scalars reproduce P7 §1 to the digit (asserted in `fig_F1.py`). `p0b_anchoring_pool743_20260912T031729Z.json`
+(`p0b_anchoring.py --pool common743`) restricts the honest mean digit distribution to the same 743 rows, keyed off P11's
+row table (asserted 743). Logs `logs/latent-vs-verbalized/{p4_result,p0b_anchoring}_pool743.log`.
 
 ```
 P4=results/raw/latent-vs-verbalized/p4_result_pool743_20260912T030653Z.json   # 743 pool; the 839-pool original is p4_result_20260911T144504Z.json
-P0B=results/raw/latent-vs-verbalized/p0b_anchoring_20260911T142455Z.json
+P0B=results/raw/latent-vs-verbalized/p0b_anchoring_pool743_20260912T031729Z.json   # 743 pool; the 839-pool original is p0b_anchoring_20260911T142455Z.json
 P3=results/raw/latent-vs-verbalized/p3_baselines_20260911T143755Z.json
 P7=results/raw/latent-vs-verbalized/p7_dpnull_check_20260911T152343Z.json
 P11=results/raw/latent-vs-verbalized/p11_probe_beats_e_20260912T015856Z.json
@@ -56,7 +58,7 @@ P12C=results/raw/latent-vs-verbalized/p12_hop_truncation_20260912T015935Z.json
 
 | figure | drawn from | numbers on the canvas | recompute |
 |---|---|---|---|
-| F1 `F1_readout_loss` | `$P4` `.scorers.{score,E,cached_mean}` (`roc`, `band_grid/lo/hi`, `logit_fit_1e-2_to_0.5`); `$P0B` `.digit_mass` | AUROC E 0.897 [0.813, 0.948], integer 0.744, cached 0.845; TPR@0.05 E 0.547 [0.389, 0.806], integer 0.417, cached 0.400; TPR@0.01 0.302 / 0.334 / 0.305; extrapolated TPR@1e-3 0.068 / 0.161 / 0.050; inset mass on digits 6–10 for the 31 nulled 0.0055 | `jq '.scorers \| {score, E, cached_mean} \| map_values({auroc: .pooled.auroc, t05: .pooled."tpr_at_0.05", t01: .pooled."tpr_at_0.01", ci05: .ci95."tpr_at_0.05", x1e3: ."logit_fit_1e-2_to_0.5"."tpr_at_1e-3_extrapolated_NOT_MEASURED"})' $P4`; `jq '.digit_mass.nulled_level2.mean_digit_dist \| to_entries \| map(select((.key\|tonumber) >= 6) \| .value) \| add' $P0B` |
+| F1 `F1_readout_loss` | `$P4` `.scorers.{score,E,cached_mean}` (`roc`, `band_grid/lo/hi`, `logit_fit_1e-2_to_0.5`); `$P0B` `.digit_mass` | AUROC E 0.897 [0.813, 0.948], integer 0.744, cached 0.845; TPR@0.05 E 0.547 [0.389, 0.806], integer 0.417, cached 0.400; TPR@0.01 0.302 / 0.334 / 0.305; extrapolated TPR@1e-3 0.068 / 0.161 / 0.050; inset (743 honest) mass on digits 6–10: 31 nulled 0.0055, honest 0.0012 | `jq '.scorers \| {score, E, cached_mean} \| map_values({auroc: .pooled.auroc, t05: .pooled."tpr_at_0.05", t01: .pooled."tpr_at_0.01", ci05: .ci95."tpr_at_0.05", x1e3: ."logit_fit_1e-2_to_0.5"."tpr_at_1e-3_extrapolated_NOT_MEASURED"})' $P4`; `jq '.digit_mass \| {nulled_level2, honest} \| map_values({n, m610: (.mean_digit_dist \| to_entries \| map(select((.key\|tonumber) >= 6) \| .value) \| add)})' $P0B` |
 | F2 `F2_no_probe_beats_E` | `$P7` `["1_same_pool_743"].scorers` (pooled AUROC, CI, `delta_p_null.p95.k`); `$P3` `"9_leave_one_category_out".pooled`, `"7_matched_negatives".scorers`; `$P11` `rows_all` + `design.thresholds` | pooled (743) E 0.897 [0.813, 0.948], score probe 0.943 [0.909, 0.966], label probe 0.909 [0.850, 0.967], text 0.842, dumb 0.553; LOCO 0.929 / 0.751 / 0.859 / 0.429; matched (147) E 0.820, 0.869 / 0.768 / 0.558 / 0.407; recovered of 31 nulled: 11 / 11 / 18 / 5 / 7, of which from `588b46de` (14 of the 31): 7 / 7 / 9 / 0 / 0 | `jq '.["1_same_pool_743"].scorers \| map_values({auroc, ci: .ci95.auroc, k: .delta_p_null.p95.k})' $P7`; `jq '."9_leave_one_category_out".pooled \| map_values(.auroc)' $P3`; `jq '."7_matched_negatives".scorers \| map_values(.auroc)' $P3`; `jq '.rows_all.columns as $c \| .design.thresholds as $T \| [.rows_all.rows[] \| select(.[4]==2 and .[5]<=1)] as $nul \| ["E","score\|ridge_E","label\|logreg","text","dumb"] \| map(. as $k \| ($c \| index($k)) as $i \| {($k): ([$nul[] \| select(.[$i] > $T[$k].p95)] \| {k: length, from_588b46de: ([.[] \| select(.[0][:8]=="588b46de")] \| length)})}) \| add' $P11` |
 | F3 `F3_where_signal_sits` | `$P2` `.best_layer_per_position["label\|logreg"]`, `["score\|ridge_E"]`; fold-wise dots from `.sweep[].metrics[].per_fold_auroc` of the same cell; `.reference_scorers.E.train_oof_population` | label arm: history 0.602, action 0.926, instructions 0.783, prompt 0.694, hidden-CoT end 0.838, visible-reasoning end 0.897, pre-digit 0.838; score arm 0.759 / 0.931 / 0.901 / 0.856 / 0.932 / 0.932 / 0.928; E on the same rows 0.891 | `jq '.best_layer_per_position \| {"label\|logreg", "score\|ridge_E"} \| map_values(map_values(.auroc))' $P2`; `jq '.reference_scorers.E.train_oof_population.auroc' $P2` |
 | F4 `F4_verdict_in_cot` | `$P12` `#25`, `#27` `.curve`; `$P12C` `#25`, `#27` `.interventions` | `#25`: 0.44 at point 0, 4.46 at s11, 9.00 at the end; objective sentence alone 5.73, benign conclusion swapped in 0.20. `#27`: prefix baseline 0.27 after s4; objective sentences appended 7.63 (6.06 without the verdict word), matched-register concern 1.02, verdict word alone 0.14 | `jq '.actions[] \| select(.action_idx==25) \| [.curve[0].E, .curve[11].E, .curve[-1].E]' $P12`; `jq '.actions[] \| select(.action_idx==27) \| {base: (.curve[] \| select(.sentence==4) \| .E), iv: [.interventions[] \| {name, E}]}' $P12C` |
@@ -69,7 +71,10 @@ P12C=results/raw/latent-vs-verbalized/p12_hop_truncation_20260912T015935Z.json
    negatives and raises E's threshold (E's recovery count 15 → 11; the integer barely moves because it is quantised),
    so the 839 numbers were the ones that flattered E. The extrapolated tails cross below 1e-2 (integer's dashed line
    ends above E's at 1e-3); the fits are driven by the mid-curve slope and the integer's is flattened by ties, so that
-   ordering is not meaningful — the caption says so, consistent with the measured 1 % point (no gap).
+   ordering is not meaningful — the caption says so, consistent with the measured 1 % point (no gap). The three AUROCs are
+   printed in the legend from the same raw (E 0.897, integer 0.744, cached 0.845); the 839-pool integer AUROC 0.748 is not
+   quoted anywhere in the summary. The inset's honest bars were the 839-row mean in the first two renders; now the
+   743-row mean from the P0b rerun (same shape; mass on 6–10 0.0012 either way).
 2. *F2's "(14 from one trajectory)".* 14 is `588b46de`'s count of integer-nulled payloads. On the 743 pool it supplies
    7 of E's 11 recoveries, 7 of the score probe's 11 and 9 of the label probe's 18 (0 of text's 5 and dumb's 7), so the
    count is printed on every row rather than only the label probe's — annotating one row would have made 18 look
