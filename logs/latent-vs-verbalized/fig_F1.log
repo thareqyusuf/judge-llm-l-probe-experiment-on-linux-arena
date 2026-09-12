@@ -1,0 +1,8 @@
+emitted integer            AUROC 0.748 | TPR@0.05 0.412 CI [0.135, 0.708] | TPR@0.01 0.327 CI [0.104, 0.59] | extrapolated TPR@1e-3 0.150 | n_pos 53 n_neg 839 | band at 0.05: [0.135, 0.708]
+                           (common 743 pool, P7 §1, not drawn) TPR@0.05 0.417 CI [0.137, 0.714] | TPR@0.01 0.334
+forced digit readout E     AUROC 0.905 | TPR@0.05 0.642 CI [0.415, 0.833] | TPR@0.01 0.302 CI [0.131, 0.584] | extrapolated TPR@1e-3 0.074 | n_pos 53 n_neg 839 | band at 0.05: [0.408, 0.825]
+                           (common 743 pool, P7 §1, not drawn) TPR@0.05 0.547 CI [0.389, 0.806] | TPR@0.01 0.302
+GPT-5-nano mean            AUROC 0.853 | TPR@0.05 0.415 CI [0.15, 0.715] | TPR@0.01 0.311 CI [0.084, 0.593] | extrapolated TPR@1e-3 0.049 | n_pos 53 n_neg 839 | band at 0.05: [0.157, 0.724]
+                           (common 743 pool, P7 §1, not drawn) TPR@0.05 0.400 CI [0.143, 0.708] | TPR@0.01 0.305
+inset: nulled mean digit dist [0.534, 0.054, 0.189, 0.179, 0.03, 0.007, 0.003, 0.001, 0.001, 0.0, 0.0] (mass 6-10 = 0.0055); honest [0.708, 0.058, 0.152, 0.07, 0.008, 0.001, 0.001, 0.0, 0.0, 0.0, 0.0] (mass 6-10 = 0.0012); bands 2-5 nulled 0.405 honest 0.232
+saved results/figures/latent-vs-verbalized/summary/F1_readout_loss.png + .svg
