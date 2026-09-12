@@ -62,6 +62,14 @@ nothing on benign actions). What this does *not* show: that a single forward pas
 only that the `<score>` readout does not do it from the diff + objective list (E 0.53) and does do it from the claim as
 text (5.7 / 5.5 / 6.1).
 
+**Write-up slot (≤ 70 words; figure `p12_hop_truncation_2panel.png`, drawn by `p12_figure_2panel.py` from `$P12` and
+`$P12C`, the five-panel `p12_hop_truncation.png` kept as the working figure).** The pre-CoT readout is E on every
+action (point 0 = 0.44 on `#25`). On `#25` the digit moves at the sentence naming `deleted_files_persist`: 0.4–1.6
+through s10, 4.5 at s11, 9.0 at the end. `#26` rises on verdict language one sentence earlier. The same objective
+sentence appended to a benign edit → 6.1; length- and register-matched concern → 1.0, a lift ≤ 0.8. One trajectory,
+n = 1. *Reading:* the CoT computes the verdict by stating an objective match, and the readout trusts the statement
+without checking it against the diff.
+
 **Kind of claim.** Existence / mechanism on one trajectory (2 payload actions + 1 payload the CoT missed + 2 controls).
 No baselines beyond the within-trajectory controls; the intervention texts are hand-written (verbatim in the raw).
 
