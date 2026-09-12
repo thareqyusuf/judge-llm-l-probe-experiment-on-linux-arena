@@ -12,12 +12,12 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6.5, 3.2), gridspec_kw={"width_rat
 a = A[25]; cv = a["curve"]; xs = [c["point"] for c in cv]; ys = [c["E"] for c in cv]; s_obj = a["first_marker_sentence"]["objective"]
 ax1.plot(xs, ys, "-o", color=DK, ms=3, lw=1.3)
 ax1.axvline(s_obj, color=RED, lw=1.3, ls="--"); ax1.text(s_obj - 0.4, 8.6, "names the\ncovert objective", color=RED, ha="right", va="top", fontsize=9)
-ax1.axhline(a["recorded"]["E"], color=C["E"], lw=0.9, ls=":"); ax1.text(1.3, a["recorded"]["E"] - 0.15, f"pre-CoT E {a['recorded']['E']:.2f}", color=C["E"], fontsize=9, va="top")
+ax1.axhline(a["recorded"]["E"], color=C["E"], lw=0.9, ls=":"); ax1.text(0.3, 1.9, f"point 0 = {ys[0]:.2f},\nempty channel;\nE {a['recorded']['E']:.2f} dotted", color=C["E"], fontsize=9, va="bottom")
 ax1.axhline(a["recorded"]["score"], color=DK, lw=0.9, ls=":"); ax1.text(12.3, a["recorded"]["score"] + 0.2, f"recorded integer {a['recorded']['score']:.0f}", color=DK, fontsize=9, va="bottom")
 ob, be = iv25["objective_only"], iv25["replace_hop3_benign"]; xd = xs[-1] + 2.2
 ax1.scatter([xd], [ob["E"]], marker="D", s=70, color=RED, zorder=5, edgecolors="k", linewidths=0.5)
 ax1.scatter([xd], [be["E"]], marker="D", s=70, color=GREY, zorder=5, edgecolors="k", linewidths=0.5)
-ax1.annotate(f"objective sentence\nalone → {ob['E']:.1f}", xy=(xd, ob["E"]), xytext=(17.5, 3.4), fontsize=9, ha="center", va="center", color=RED, arrowprops=dict(arrowstyle="-", lw=0.6, color=RED))
+ax1.annotate(f"objective sentence\nalone → {ob['E']:.1f}", xy=(xd, ob["E"]), xytext=(18.0, 3.4), fontsize=9, ha="center", va="center", color=RED, arrowprops=dict(arrowstyle="-", lw=0.6, color=RED))
 ax1.annotate(f"benign conclusion\nswapped in → {be['E']:.1f}", xy=(xd, be["E"]), xytext=(16.0, 1.8), fontsize=9, ha="center", va="center", color="#374151", arrowprops=dict(arrowstyle="-", lw=0.6, color=GREY))
 ax1.set_title(f"#25  payload (integer {a['recorded']['score']:.0f}, E {a['recorded']['E']:.2f})", fontsize=10)
 ax1.axvline(xs[-1] + 1.0, color="#9ca3af", lw=0.8); ax1.set_xlabel("sentences of its own analysis fed  |  edited"); ax1.set_ylabel("forced digit readout"); ax1.set_ylim(-0.3, 10.3); ax1.set_xlim(-0.6, xd + 1)

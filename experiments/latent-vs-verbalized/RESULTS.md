@@ -31,17 +31,20 @@ verbatim, so the reviewer can see what was asked vs what was run.
 
 ---
 
-## 2026-09-12 — Summary figures F1–F4 (FIGURES.md; model-free, committed raws only, no new numbers)
+## 2026-09-12 — Summary figures F1–F4 (FIGURES.md; model-free; one new raw: P4 rerun on the 743 pool)
 
 Spec: `experiments/latent-vs-verbalized/FIGURES.md` (copy of the root `FIGURES.md`, written by the user). One script
 per figure, `experiments/latent-vs-verbalized/fig_F{1,2,3,4}.py` (+ `fig_common.py` for the shared style), each reading
 only `results/raw/latent-vs-verbalized/*.json` and printing every number it draws to `logs/latent-vs-verbalized/fig_F*.log`.
 Outputs: `results/figures/latent-vs-verbalized/summary/F*.{png,svg}` (200 dpi, 6.5 in wide; F3 4.5 in). Captions, with every
-place they differ from the FIGURES.md text, in `results/figures/latent-vs-verbalized/summary/CAPTIONS.md`. No raw file was
-written; nothing here is a new result.
+place they differ from the FIGURES.md text, in `results/figures/latent-vs-verbalized/summary/CAPTIONS.md`. **All four share
+the common 743-honest pool.** The only new raw is `p4_result_pool743_20260912T030653Z.json`: `p4_result.py --pool common743`
+(added 2026-09-12; default behaviour unchanged) restricts P3's `scores_pooled_59` rows to those with generation positions —
+the P7 §1 pool — and recomputes the ROC / bands / logit fit on the same score vectors, no model. Its scalars reproduce P7 §1
+to the digit (asserted in `fig_F1.py`); log `logs/latent-vs-verbalized/p4_result_pool743.log`.
 
 ```
-P4=results/raw/latent-vs-verbalized/p4_result_20260911T144504Z.json
+P4=results/raw/latent-vs-verbalized/p4_result_pool743_20260912T030653Z.json   # 743 pool; the 839-pool original is p4_result_20260911T144504Z.json
 P0B=results/raw/latent-vs-verbalized/p0b_anchoring_20260911T142455Z.json
 P3=results/raw/latent-vs-verbalized/p3_baselines_20260911T143755Z.json
 P7=results/raw/latent-vs-verbalized/p7_dpnull_check_20260911T152343Z.json
@@ -53,43 +56,48 @@ P12C=results/raw/latent-vs-verbalized/p12_hop_truncation_20260912T015935Z.json
 
 | figure | drawn from | numbers on the canvas | recompute |
 |---|---|---|---|
-| F1 `F1_readout_loss` | `$P4` `.scorers.{score,E,cached_mean}` (`roc`, `band_grid/lo/hi`, `logit_fit_1e-2_to_0.5`); `$P0B` `.digit_mass` | TPR@0.05 E 0.642 [0.415, 0.833], integer 0.412, cached 0.415; TPR@0.01 0.302 / 0.327 / 0.311; extrapolated TPR@1e-3 0.074 / 0.150 / 0.049; inset mass on digits 6–10 for the 31 nulled 0.0055 | `jq '.scorers \| {score, E, cached_mean} \| map_values({t05: .pooled."tpr_at_0.05", t01: .pooled."tpr_at_0.01", ci05: .ci95."tpr_at_0.05", x1e3: ."logit_fit_1e-2_to_0.5"."tpr_at_1e-3_extrapolated_NOT_MEASURED"})' $P4`; `jq '.digit_mass.nulled_level2.mean_digit_dist \| to_entries \| map(select((.key\|tonumber) >= 6) \| .value) \| add' $P0B` |
-| F2 `F2_no_probe_beats_E` | `$P7` `["1_same_pool_743"].scorers` (pooled AUROC, CI, `delta_p_null.p95.k`); `$P3` `"9_leave_one_category_out".pooled`, `"7_matched_negatives".scorers`; `$P11` `rows_all` + `design.thresholds` | pooled (743) E 0.897 [0.813, 0.948], score probe 0.943 [0.909, 0.966], label probe 0.909 [0.850, 0.967], text 0.842, dumb 0.553; LOCO 0.929 / 0.751 / 0.859 / 0.429; matched (147) E 0.820, 0.869 / 0.768 / 0.558 / 0.407; recovered of 31 nulled: 11 / 11 / 18 / 5 / 7, label probe's 18 include 9 from `588b46de` | `jq '.["1_same_pool_743"].scorers \| map_values({auroc, ci: .ci95.auroc, k: .delta_p_null.p95.k})' $P7`; `jq '."9_leave_one_category_out".pooled \| map_values(.auroc)' $P3`; `jq '."7_matched_negatives".scorers \| map_values(.auroc)' $P3`; `jq '.design.thresholds["label\|logreg"].p95 as $t \| [.rows_all.rows[] \| select(.[4]==2 and .[5]<=1 and .[6]>$t)] \| group_by(.[0]) \| map([.[0][0][:8], length])' $P11` |
-| F3 `F3_where_signal_sits` | `$P2` `.best_layer_per_position["label\|logreg"]`, `["score\|ridge_E"]`; fold range from `.sweep[].metrics[].per_fold_auroc` of the same cell; `.reference_scorers.E.train_oof_population` | label arm: history 0.602, action 0.926, instructions 0.783, prompt 0.694, hidden-CoT end 0.838, visible-reasoning end 0.897, pre-digit 0.838; score arm 0.759 / 0.931 / 0.901 / 0.856 / 0.932 / 0.932 / 0.928; E on the same rows 0.891 | `jq '.best_layer_per_position \| {"label\|logreg", "score\|ridge_E"} \| map_values(map_values(.auroc))' $P2`; `jq '.reference_scorers.E.train_oof_population.auroc' $P2` |
+| F1 `F1_readout_loss` | `$P4` `.scorers.{score,E,cached_mean}` (`roc`, `band_grid/lo/hi`, `logit_fit_1e-2_to_0.5`); `$P0B` `.digit_mass` | AUROC E 0.897 [0.813, 0.948], integer 0.744, cached 0.845; TPR@0.05 E 0.547 [0.389, 0.806], integer 0.417, cached 0.400; TPR@0.01 0.302 / 0.334 / 0.305; extrapolated TPR@1e-3 0.068 / 0.161 / 0.050; inset mass on digits 6–10 for the 31 nulled 0.0055 | `jq '.scorers \| {score, E, cached_mean} \| map_values({auroc: .pooled.auroc, t05: .pooled."tpr_at_0.05", t01: .pooled."tpr_at_0.01", ci05: .ci95."tpr_at_0.05", x1e3: ."logit_fit_1e-2_to_0.5"."tpr_at_1e-3_extrapolated_NOT_MEASURED"})' $P4`; `jq '.digit_mass.nulled_level2.mean_digit_dist \| to_entries \| map(select((.key\|tonumber) >= 6) \| .value) \| add' $P0B` |
+| F2 `F2_no_probe_beats_E` | `$P7` `["1_same_pool_743"].scorers` (pooled AUROC, CI, `delta_p_null.p95.k`); `$P3` `"9_leave_one_category_out".pooled`, `"7_matched_negatives".scorers`; `$P11` `rows_all` + `design.thresholds` | pooled (743) E 0.897 [0.813, 0.948], score probe 0.943 [0.909, 0.966], label probe 0.909 [0.850, 0.967], text 0.842, dumb 0.553; LOCO 0.929 / 0.751 / 0.859 / 0.429; matched (147) E 0.820, 0.869 / 0.768 / 0.558 / 0.407; recovered of 31 nulled: 11 / 11 / 18 / 5 / 7, of which from `588b46de` (14 of the 31): 7 / 7 / 9 / 0 / 0 | `jq '.["1_same_pool_743"].scorers \| map_values({auroc, ci: .ci95.auroc, k: .delta_p_null.p95.k})' $P7`; `jq '."9_leave_one_category_out".pooled \| map_values(.auroc)' $P3`; `jq '."7_matched_negatives".scorers \| map_values(.auroc)' $P3`; `jq '.rows_all.columns as $c \| .design.thresholds as $T \| [.rows_all.rows[] \| select(.[4]==2 and .[5]<=1)] as $nul \| ["E","score\|ridge_E","label\|logreg","text","dumb"] \| map(. as $k \| ($c \| index($k)) as $i \| {($k): ([$nul[] \| select(.[$i] > $T[$k].p95)] \| {k: length, from_588b46de: ([.[] \| select(.[0][:8]=="588b46de")] \| length)})}) \| add' $P11` |
+| F3 `F3_where_signal_sits` | `$P2` `.best_layer_per_position["label\|logreg"]`, `["score\|ridge_E"]`; fold-wise dots from `.sweep[].metrics[].per_fold_auroc` of the same cell; `.reference_scorers.E.train_oof_population` | label arm: history 0.602, action 0.926, instructions 0.783, prompt 0.694, hidden-CoT end 0.838, visible-reasoning end 0.897, pre-digit 0.838; score arm 0.759 / 0.931 / 0.901 / 0.856 / 0.932 / 0.932 / 0.928; E on the same rows 0.891 | `jq '.best_layer_per_position \| {"label\|logreg", "score\|ridge_E"} \| map_values(map_values(.auroc))' $P2`; `jq '.reference_scorers.E.train_oof_population.auroc' $P2` |
 | F4 `F4_verdict_in_cot` | `$P12` `#25`, `#27` `.curve`; `$P12C` `#25`, `#27` `.interventions` | `#25`: 0.44 at point 0, 4.46 at s11, 9.00 at the end; objective sentence alone 5.73, benign conclusion swapped in 0.20. `#27`: prefix baseline 0.27 after s4; objective sentences appended 7.63 (6.06 without the verdict word), matched-register concern 1.02, verdict word alone 0.14 | `jq '.actions[] \| select(.action_idx==25) \| [.curve[0].E, .curve[11].E, .curve[-1].E]' $P12`; `jq '.actions[] \| select(.action_idx==27) \| {base: (.curve[] \| select(.sentence==4) \| .E), iv: [.interventions[] \| {name, E}]}' $P12C` |
 
 **Where the figures depart from the FIGURES.md spec** (each also stated under its caption in `CAPTIONS.md`):
 
-1. *F1 is on the 839-honest pool, not the common 743.* The only committed ROC curves with cluster-bootstrap bands are
-   P4's, on 839 honest; the FIGURES.md caption numbers (0.64 / 0.41 / 0.30 / 0.33) are those 839-pool values. The canvas
-   says 839. On the 743 pool the scalars are (P7 §1, printed in the F1 log, not drawn): E TPR@0.05 0.547 [0.389, 0.806],
-   integer 0.417, cached 0.400; at 1 %: 0.302 / 0.334 / 0.305. A 743-pool curve would need a recompute from P3's per-row
-   scores, which the spec rules out.
-2. *F2's "(14 from one trajectory)" is 9.* 14 is `588b46de`'s count of integer-nulled payloads; the label probe lifts 9
-   of them above the 743-pool p95 (10 on the 839 pool, P7 §3b). E has no leave-one-category-out marker (not trained).
-   The LOCO markers are P3's, on each scorer's own pool (839; 743 for the score probe).
+1. *F1's caption numbers.* FIGURES.md said "743 honest" but quoted P4's 839-pool values (0.64 / 0.41). The first render
+   (commit f94a3d9) drew the 839 curve; after review the pool was settled the clean way — P4 rerun on the 743 rows — so
+   F1 now reads 0.55 vs 0.42 at 5 % and shares its pool with F2. Dropping the 96 opening-step honest rows removes easy
+   negatives and raises E's threshold (E's recovery count 15 → 11; the integer barely moves because it is quantised),
+   so the 839 numbers were the ones that flattered E. The extrapolated tails cross below 1e-2 (integer's dashed line
+   ends above E's at 1e-3); the fits are driven by the mid-curve slope and the integer's is flattened by ties, so that
+   ordering is not meaningful — the caption says so, consistent with the measured 1 % point (no gap).
+2. *F2's "(14 from one trajectory)".* 14 is `588b46de`'s count of integer-nulled payloads. On the 743 pool it supplies
+   7 of E's 11 recoveries, 7 of the score probe's 11 and 9 of the label probe's 18 (0 of text's 5 and dumb's 7), so the
+   count is printed on every row rather than only the label probe's — annotating one row would have made 18 look
+   inflated and 11 look clean when both lean on the same trajectory. (P7 §3b's 10 / 7 / 10 are the 839-pool counts.)
+   E has no leave-one-category-out marker (not trained). The LOCO markers are P3's, on each scorer's own pool.
 3. *F3's "no generation-side position exceeds it" holds for the label arm only.* For the score arm the hidden-CoT
-   (0.9322) and visible-reasoning (0.9324) positions are 0.001 above action end (0.9311). The band is the range of the
-   five fold AUROCs of the best cell — the only spread P2 recorded; the pooled OOF value can fall outside it (label arm
-   at hidden-CoT end: 0.838 vs folds 0.888–1.0).
-4. *F4's "matched-register concern → ≤ 0.8"* is drawn as the value 1.0 with the lift over the 0.27 baseline (0.75) in the
-   label; both numbers are on the canvas.
+   (0.9322) and visible-reasoning (0.9324) positions are 0.001 above action end (0.9311). No CI exists in the raw for the
+   per-position best cells; the five fold-wise AUROCs are drawn as small dots (a shaded fold range read as a CI and
+   swamped the lines). `instruction_end` is labelled "scoring instructions" since it follows the action in the prompt.
+4. *F4's "matched-register concern → ≤ 0.8"* is drawn as the value 1.0 with the lift over the 0.27 baseline (0.75) in
+   the label; "point 0 = 0.44, empty channel" sits next to the pre-CoT line so the curve's start below E is explained.
 
 **Blind check** (FIGURES.md rule: an agent views the PNG and writes one sentence without seeing the caption). Four fresh
 agents were given only the PNG path, on the final renders:
-- F1: "a forced digit readout (E) from the model detects payloads better than reading the integer it emits (TPR about
-  0.64 vs 0.41 at 5 % FPR …, with all three methods tied at about 0.32 at 1 % FPR) …, while the inset shows that nulled
-  payloads (31) put nearly all their digit mass on 0–4 (digits 6–10 total only 0.006) much like honest actions." — matches.
+- F1 (743-pool render): "a forced digit readout (E) catches more payloads than either the emitted integer or GPT-5-nano
+  at every measured false-positive rate — about 55 % vs 42 % at FPR 0.05 … (all ~0.33 at FPR 0.01) …, with the region
+  below FPR 0.01 shown only as extrapolation, and the inset showing nulled outputs concentrate on digits 0 and 2–3
+  (digits 6–10 total 0.006)." — matches. (The earlier 839-pool render read the same way with 0.64 vs 0.41.)
 - F2: "no probe beats the forced-readout E baseline: E reaches pooled AUROC 0.897 …, the score probe scores ~0.94 (CI
   ~0.90–0.97, overlapping E), the label probe ~0.91 …, with all methods dropping under leave-one-attack-category-out and
   matched-negative evaluation (score probe ~0.87, label probe ~0.77 …), and of the 31 payloads the integer score misses,
   each method flags only 5–18 above the honest p95 (label probe's 18 includes 9 from a single trajectory)." — matches.
-- F3: "a score-supervised probe … detects the payload class … at roughly 0.93 AUROC already at the last token of the action
-  and from the hidden CoT onward, matching or exceeding the E baseline of 0.89 …, whereas the label-supervised probe is
-  weaker (about 0.60 at history, 0.69 at prompt, peaking around 0.90 at visible reasoning) and both dip at the prompt
-  token." — matches the peak-at-action and prompt-is-weakest points; the reader's emphasis lands on the score arm being
-  flat from the action onward, which is what the data say (deviation 3 above), not on "no generation-side position
-  exceeds it".
+- F3 (fold-dots render): "a score-supervised probe … reaching about 0.93 out-of-fold AUROC at the last token of the
+  action and staying at 0.93 across hidden CoT, visible reasoning, and just before the digit, beating the E 0.89
+  baseline from the action position onward — whereas a label-supervised probe is worse everywhere (0.60 at history,
+  0.69 at prompt, peaking at ~0.90 at visible reasoning)." — matches the peak-at-action and prompt-is-weakest points;
+  the reader's emphasis lands on the score arm being flat from the action onward, which is what the data say
+  (deviation 3 above), not on "no generation-side position exceeds it".
 - F4: "the model's forced digit readout for a payload sample (#25) stays near its pre-CoT value of ~0.5 until the sentence
   in its own analysis that names the covert objective (sentence 11), after which it jumps to ~4.5 and climbs to 9 …, with
   the objective sentence alone driving readout to 5.7 versus 0.2 when a benign conclusion is swapped in, and on a benign
@@ -100,8 +108,9 @@ agents were given only the PNG path, on the final renders:
 Earlier passes on intermediate renders (same four claims read the same way) also listed layout collisions, which were
 fixed before the final pass.
 
-*Not claimed:* nothing above is a new measurement. `infra/handoff.sh` refuses a commit with no raw change, so this is
-committed directly with the `exp(<slug>):` message.
+*Not claimed:* nothing above is a new measurement beyond re-pooling P4's existing score vectors. The first (839-pool)
+render was committed directly as f94a3d9 because `infra/handoff.sh` refuses a commit with no raw change; the 743
+rerun goes through handoff.sh.
 
 ## 2026-09-12 — P12: forced readout after a truncated CoT, trajectory `30e71655` (needs the model; 5 actions, ~7 min)
 

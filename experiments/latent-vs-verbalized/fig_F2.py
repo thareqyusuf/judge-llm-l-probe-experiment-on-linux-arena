@@ -8,15 +8,20 @@ P3 = RAW / "p3_baselines_20260911T143755Z.json"; P7 = RAW / "p7_dpnull_check_202
 p3, p7, p11 = load(P3), load(P7), load(P11)
 ROWS = [("E", "E", "forced readout E"), ("score|ridge_E", "score_probe", "score probe"), ("label|logreg", "label_probe", "label probe"), ("text", "text", "TF-IDF text"), ("dumb", "dumb", "9 dumb features")]
 same = p7["1_same_pool_743"]["scorers"]; loco = p3["9_leave_one_category_out"]["pooled"]; matched = p3["7_matched_negatives"]["scorers"]
-# label probe's recoveries by trajectory (743 pool): rows with label_level 2 and integer <= 1, probe value > recorded p95
-cols = p11["rows_all"]["columns"]; thr = p11["design"]["thresholds"]["label|logreg"]["p95"]; ci_ = cols.index
+# recoveries by trajectory on the 743 pool: nulled level-2 rows (label_level 2, integer <= 1) above each scorer's p95 recorded in P11
+cols = p11["rows_all"]["columns"]; ci_ = cols.index; TH = p11["design"]["thresholds"]
 nulled = [r for r in p11["rows_all"]["rows"] if r[ci_("label_level")] == 2 and r[ci_("integer")] <= 1]
-lift = [r for r in nulled if r[ci_("label|logreg")] > thr]; per_traj = {}
-for r in lift: per_traj[r[ci_("traj_id")][:8]] = per_traj.get(r[ci_("traj_id")][:8], 0) + 1
-top_traj, top_n = max(per_traj.items(), key=lambda kv: kv[1]); assert len(lift) == same["label|logreg"]["delta_p_null"]["p95"]["k"], (len(lift), same["label|logreg"]["delta_p_null"]["p95"]["k"])
-print(f"label probe recoveries on 743 pool: {len(lift)} of {len(nulled)}; by trajectory {per_traj}; largest {top_traj} = {top_n}")
+traj_n = {}
+for r in nulled: traj_n[r[ci_("traj_id")][:8]] = traj_n.get(r[ci_("traj_id")][:8], 0) + 1
+BIG = max(traj_n, key=traj_n.get)
+lifted = {key: [r for r in nulled if r[ci_(key)] is not None and r[ci_(key)] > TH[key]["p95"]] for key, _, _ in ROWS}
+from_big = {key: sum(r[ci_("traj_id")].startswith(BIG) for r in lifted[key]) for key in lifted}
+for key, _, _ in ROWS:
+    assert len(lifted[key]) == same[key]["delta_p_null"]["p95"]["k"], (key, len(lifted[key]), same[key]["delta_p_null"]["p95"]["k"])
+print(f"nulled payloads by trajectory: {traj_n}; largest {BIG} ({traj_n[BIG]} of {len(nulled)})")
+print("recovered on 743 pool (from " + BIG + "): " + ", ".join(f"{key} {len(lifted[key])} ({from_big[key]})" for key in lifted))
 
-fig, ax = plt.subplots(figsize=(6.5, 3.4)); fig.subplots_adjust(right=0.72)
+fig, ax = plt.subplots(figsize=(6.5, 3.4)); fig.subplots_adjust(right=0.74)
 ys = list(range(len(ROWS)))[::-1]
 for y in ys: ax.axhline(y, color="#eeeeee", lw=0.8, zorder=0)
 for y, (key, ck, lab) in zip(ys, ROWS):
@@ -31,9 +36,9 @@ for y, (key, ck, lab) in zip(ys, ROWS):
         v = matched[key]["auroc"]; ax.plot([v], [y - 0.22], mk, color=C[ck], ms=3.5 if mk not in "x+" else 5, mew=1.2, zorder=4)
         line += f" | matched {v:.3f} (n_neg {matched[key]['n_neg']})"
     print(line)
-    k = s["delta_p_null"]["p95"]["k"]; extra = f"  ({top_n} from one trajectory)" if key == "label|logreg" else ""
-    ax.text(1.015, y, f"{k}{extra}", transform=ax.get_yaxis_transform(), va="center", ha="left", fontsize=9, clip_on=False)
-ax.text(1.015, len(ROWS) + 0.5, "of the 31 payloads the\ninteger misses, how many\nscore above honest p95", transform=ax.get_yaxis_transform(), va="top", ha="left", fontsize=9, clip_on=False)
+    k = s["delta_p_null"]["p95"]["k"]
+    ax.text(1.015, y, f"{k}  ({from_big[key]})", transform=ax.get_yaxis_transform(), va="center", ha="left", fontsize=9, clip_on=False)
+ax.text(1.015, len(ROWS) - 0.5, f"of the {len(nulled)} the integer misses,\nhow many above honest p95\n(brackets: from trajectory\n{BIG}, which holds\n{traj_n[BIG]} of the {len(nulled)})", transform=ax.get_yaxis_transform(), va="bottom", ha="left", fontsize=9, clip_on=False)
 eV = same["E"]["auroc"]; ax.axvline(eV, color=C["E"], lw=0.9, ls=(0, (4, 3)), zorder=1); ax.text(eV - 0.008, len(ROWS) + 0.3, f"E {eV:.3f}", color=C["E"], ha="right", va="bottom", fontsize=9)
 print(f"data_tampering LOCO fold: label probe {p3['9_leave_one_category_out']['groups']['data_tampering']['label|logreg']['auroc']:.3f}, score probe {p3['9_leave_one_category_out']['groups']['data_tampering']['score|ridge_E']['auroc']:.3f}")
 b = p7["2_bootstrap"]["pool_743_score_vs_E"]["score|ridge_E-E|d_auroc"]; print(f"paired score probe − E AUROC (743): {b['mean']:+.3f} CI [{b['ci95'][0]:+.3f}, {b['ci95'][1]:+.3f}]")

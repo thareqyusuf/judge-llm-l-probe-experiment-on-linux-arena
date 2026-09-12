@@ -1,9 +1,9 @@
 """F1 — readout loss: E vs the emitted integer (FIGURES.md). Reads P4 (ROC, cluster-bootstrap bands, logit fit) and P0b
-(mean digit distributions). Pool: P4's pooled-59 ROC is on the 839-honest pool (the only committed ROC curve); the common-743
-scalars live in P7 and are printed below for comparison, not drawn."""
+(mean digit distributions). Pool: the common 743 honest rows — P4 rerun with `--pool common743` (2026-09-12; same score vectors
+as P3, no model), so F1 shares its pool with F2. The P7 §1 scalars on the same pool are printed as a cross-check."""
 from fig_common import *
 
-P4 = RAW / "p4_result_20260911T144504Z.json"; P0B = RAW / "p0b_anchoring_20260911T142455Z.json"; P7 = RAW / "p7_dpnull_check_20260911T152343Z.json"
+P4 = RAW / "p4_result_pool743_20260912T030653Z.json"; P0B = RAW / "p0b_anchoring_20260911T142455Z.json"; P7 = RAW / "p7_dpnull_check_20260911T152343Z.json"
 p4, p0b, p7 = load(P4), load(P0B), load(P7)
 lg = lambda x: np.log10(np.asarray(x, float) / (1 - np.asarray(x, float)))  # noqa: E731
 TICKS = [1e-3, 1e-2, 5e-2, 0.1, 0.5]
@@ -23,19 +23,19 @@ for key, ck, lab in KEYS:
     print(f"{lab:26s} AUROC {d['pooled']['auroc']:.3f} | TPR@0.05 {d['pooled']['tpr_at_0.05']:.3f} CI {np.round(d['ci95']['tpr_at_0.05'], 3).tolist()}"
           f" | TPR@0.01 {d['pooled']['tpr_at_0.01']:.3f} CI {np.round(d['ci95']['tpr_at_0.01'], 3).tolist()} | extrapolated TPR@1e-3 {fit['tpr_at_1e-3_extrapolated_NOT_MEASURED']:.3f}"
           f" | n_pos {d['n_pos']} n_neg {d['n_neg']} | band at 0.05: [{np.interp(0.05, grid, lo):.3f}, {np.interp(0.05, grid, hi):.3f}]")
-    s7 = p7["1_same_pool_743"]["scorers"][key]; print(f"{'':26s} (common 743 pool, P7 §1, not drawn) TPR@0.05 {s7['tpr_at_0.05']:.3f} CI {np.round(s7['ci95']['tpr_at_0.05'], 3).tolist()} | TPR@0.01 {s7['tpr_at_0.01']:.3f}")
+    s7 = p7["1_same_pool_743"]["scorers"][key]; assert abs(s7["tpr_at_0.05"] - d["pooled"]["tpr_at_0.05"]) < 1e-9 and abs(s7["auroc"] - d["pooled"]["auroc"]) < 1e-9, key; print(f"{'':26s} (P7 §1 same pool, cross-check) TPR@0.05 {s7['tpr_at_0.05']:.3f} CI {np.round(s7['ci95']['tpr_at_0.05'], 3).tolist()} | TPR@0.01 {s7['tpr_at_0.01']:.3f}")
 for x in (1e-2, 5e-2):
     ax.axvline(lg(x), color="#555555", lw=0.8, ls=(0, (2, 2)), zorder=1)
 ax.text((lg(1e-3) + lg(1e-2)) / 2, 0.985, "logit-linear\nextrapolation,\nnot measured", ha="center", va="top", fontsize=9, color="#555555")
 ax.set_xticks(lg(TICKS)); ax.set_xticklabels([f"{x:g}" for x in TICKS]); ax.set_xlim(lg(1e-3) - 0.08, lg(0.5) + 0.08); ax.set_ylim(0, 1)
 ax.set_xlabel("false-positive rate on honest actions (logit scale)"); ax.set_ylabel("true-positive rate, level-2 payloads")
-ax.text(lg(1e-2) + 0.06, 0.975, f"n = {p4['scorers']['E']['n_pos']} payloads / {p4['scorers']['E']['n_neg']} honest", va="top", fontsize=9)
-ax.legend(loc="lower left", bbox_to_anchor=(0.30, 0.0), frameon=False, handlelength=2.6)
+ax.text(lg(1e-2) + 0.12, 0.975, f"n = {p4['scorers']['E']['n_pos']} payloads / {p4['scorers']['E']['n_neg']} honest", va="top", fontsize=9)
+ax.legend(loc="lower left", bbox_to_anchor=(0.26, 0.0), frameon=False, handlelength=2.4, handletextpad=0.6)
 
 # inset: mean digit distribution, 31 integer-nulled payloads vs honest
 dm = p0b["digit_mass"]; nul, hon = dm["nulled_level2"], dm["honest"]; digits = list(range(11))
 a = np.array([nul["mean_digit_dist"][str(k)] for k in digits]); b = np.array([hon["mean_digit_dist"][str(k)] for k in digits])
-ins = ax.inset_axes([0.70, 0.10, 0.29, 0.29]); ins.set_facecolor("white"); ins.set_zorder(6); w = 0.4
+ins = ax.inset_axes([0.715, 0.10, 0.28, 0.29]); ins.set_facecolor("white"); ins.set_zorder(6); w = 0.4
 ins.bar(np.array(digits) - w / 2, a, w, color=C["E"], label=f"nulled ({nul['n']})")
 ins.bar(np.array(digits) + w / 2, b, w, color="#bbbbbb", label=f"honest ({hon['n']})")
 ins.set_xticks(digits); ins.set_xticklabels([str(k) if k % 2 == 0 else "" for k in digits], fontsize=9); ins.tick_params(axis="y", labelsize=9); ins.set_ylim(0, 0.8); ins.set_yticks([0, 0.4])

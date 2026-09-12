@@ -1,4 +1,5 @@
-label probe recoveries on 743 pool: 18 of 31; by trajectory {'1e4bd987': 2, '32985679': 2, '52b8ede8': 1, '588b46de': 9, '68193011': 1, '82e3be30': 1, 'ddce4c77': 2}; largest 588b46de = 9
+nulled payloads by trajectory: {'1e4bd987': 2, '32985679': 4, '52b8ede8': 1, '588b46de': 14, '68193011': 1, '82e3be30': 1, 'd4b401b9': 3, 'ddce4c77': 5}; largest 588b46de (14 of 31)
+recovered on 743 pool (from 588b46de): E 11 (7), score|ridge_E 11 (7), label|logreg 18 (9), text 5 (0), dumb 7 (0)
 forced readout E   pooled(743) 0.897 CI [0.813, 0.948] | k(p95) 11/31 | matched 0.820 (n_neg 147)
 score probe        pooled(743) 0.943 CI [0.909, 0.966] | k(p95) 11/31 | LOCO 0.929 (n_neg 743) | matched 0.869 (n_neg 147)
 label probe        pooled(743) 0.909 CI [0.850, 0.967] | k(p95) 18/31 | LOCO 0.751 (n_neg 839) | matched 0.768 (n_neg 147)

@@ -27,8 +27,12 @@ def main():
     p3p = sorted(p for p in glob.glob(str(C.RAW_DIR / "p3_baselines_*.json")) if "_ph" not in p)[-1]; p3 = json.load(open(p3p))
     p2p = sorted(p for p in glob.glob(str(C.RAW_DIR / "p2_sweep_*.json")) if "_nosusp" not in p)[-1]; p2 = json.load(open(p2p))
     cols = p3["scores_pooled_59"]["columns"]; R = [dict(zip(cols, r)) for r in p3["scores_pooled_59"]["rows"]]
+    pool = "common743" if "--pool" in sys.argv and sys.argv[sys.argv.index("--pool") + 1] == "common743" else "all"
+    if pool == "common743":  # 2026-09-12: same rows as P7 §1 — honest rows with generation positions (score|ridge_E not None); no model, same score vectors
+        R = [r for r in R if r["score|ridge_E"] is not None]
+    raw_name, fig_name = ("p4_result_pool743", "p4_tail_curve_pool743.png") if pool == "common743" else ("p4_result", "p4_tail_curve.png")
     split = json.loads((C.HERE / "split.json").read_text()); test_ids = set(split["test"])
-    out = {"slug": C.SLUG, "script": f"experiments/{C.SLUG}/p4_result.py", "timestamp": stamp, "git_commit": C.git_commit(), "inputs": {"p3_raw": str(Path(p3p).relative_to(C.REPO)), "p2_raw": str(Path(p2p).relative_to(C.REPO))}, "scorers": {}}
+    out = {"slug": C.SLUG, "script": f"experiments/{C.SLUG}/p4_result.py", "timestamp": stamp, "git_commit": C.git_commit(), "inputs": {"p3_raw": str(Path(p3p).relative_to(C.REPO)), "p2_raw": str(Path(p2p).relative_to(C.REPO))}, "pool": {"name": pool, "rule": "rows with score|ridge_E not None (honest rows with generation positions), as in P7 section 1" if pool == "common743" else "all scores_pooled_59 rows", "n_rows": len(R)}, "scorers": {}}
     rng = random.Random(0)
     for s, name in SCORERS:
         rr = [r for r in R if r[s] is not None]; pos = [r for r in rr if r["is_pos"]]; neg = [r for r in rr if r["is_neg"]]
@@ -71,8 +75,8 @@ def main():
     ax.set_xlim(lg(8e-4), lg(0.6)); ax.set_ylim(-2.3, 2.5); ax.set_xlabel("logit10 FPR (honest actions, n=839)"); ax.set_ylabel("logit10 TPR (level-2 payload actions, n=53)")
     ax.set_title("Pooled out-of-sample over 59 trajectories; bands = 95 % trajectory-cluster bootstrap (E and probes); dashed = logit-linear extrapolation", fontsize=8)
     ax.legend(fontsize=7, loc="upper left", frameon=False); ax.spines[["top", "right"]].set_visible(False); fig.tight_layout()
-    fp = C.fig_path("p4_tail_curve.png"); fig.savefig(fp, dpi=150); plt.close(fig); out["figure"] = str(fp.relative_to(C.REPO))
-    C.write_raw("p4_result", out, stamp)
+    fp = C.fig_path(fig_name); fig.savefig(fp, dpi=150); plt.close(fig); out["figure"] = str(fp.relative_to(C.REPO))
+    C.write_raw(raw_name, out, stamp)
     print(f"{'scorer':26} {'AUROC [CI]':22} {'TPR@5% [CI]':22} {'TPR@1% [CI]':22} {'test AUROC/TPR5/TPR1':22} {'dp_null p95 / p99'}")
     for s, name in SCORERS:
         d = out["scorers"][s]; m = d["pooled"]; c = d["ci95"]; t = d["locked_test"]; q = d["delta_p_null"]
